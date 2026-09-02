@@ -1,7 +1,18 @@
 import React, { useState } from "react";
 import { usePaseo } from "../../context/PaseoContext";
 import { useTheme, type Theme } from "../../context/ThemeContext";
-import { X, Server, Key, Moon, Sun, Monitor, RefreshCw, CheckCircle2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Button } from "../ui/button";
+import { Server, Key, Moon, Sun, Monitor, RefreshCw, CheckCircle2 } from "lucide-react";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -9,14 +20,20 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { serverUrl, authToken, setServerUrl, setAuthToken, reconnect, connectionState, serverInfo } = usePaseo();
+  const {
+    serverUrl,
+    authToken,
+    setServerUrl,
+    setAuthToken,
+    reconnect,
+    connectionState,
+    serverInfo,
+  } = usePaseo();
   const { theme, setTheme } = useTheme();
 
   const [urlInput, setUrlInput] = useState(serverUrl);
   const [tokenInput, setTokenInput] = useState(authToken);
   const [saved, setSaved] = useState(false);
-
-  if (!isOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,34 +48,31 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-      <div className="relative w-full max-w-md rounded-xl bg-card border border-border shadow-2xl p-6 text-card-foreground">
-        <div className="flex items-center justify-between pb-4 border-b border-border">
-          <div className="flex items-center gap-2">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
             <Server className="w-5 h-5 text-primary" />
-            <h2 className="text-base font-semibold">Settings & Connection</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+            <span>Settings & Connection</span>
+          </DialogTitle>
+          <DialogDescription>
+            Configure your Paseo daemon connection and client preferences.
+          </DialogDescription>
+        </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-5 pt-4">
+        <form onSubmit={handleSave} className="space-y-4 pt-1">
           {/* Paseo Daemon URL */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Server className="w-3.5 h-3.5" />
               Paseo Daemon Endpoint
-            </label>
-            <input
+            </Label>
+            <Input
               type="text"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="ws://127.0.0.1:6767/ws"
-              className="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="text-xs font-mono"
             />
             <p className="text-[11px] text-muted-foreground">
               Direct WebSocket connection to the local Paseo daemon.
@@ -67,27 +81,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Bearer Token */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+            <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
               <Key className="w-3.5 h-3.5" />
               Auth Bearer Token (Optional)
-            </label>
-            <input
+            </Label>
+            <Input
               type="password"
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               placeholder="paseo_live_..."
-              className="w-full px-3 py-2 text-sm rounded-lg bg-background border border-border focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="text-xs font-mono"
             />
           </div>
 
           {/* Theme Selector */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Appearance / Theme</label>
+            <Label className="text-xs font-medium text-muted-foreground">Appearance / Theme</Label>
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => setTheme("light")}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer ${
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "light"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border hover:bg-accent text-muted-foreground"
@@ -99,7 +113,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <button
                 type="button"
                 onClick={() => setTheme("dark")}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer ${
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "dark"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border hover:bg-accent text-muted-foreground"
@@ -111,7 +125,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <button
                 type="button"
                 onClick={() => setTheme("system")}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer ${
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "system"
                     ? "border-primary bg-primary/10 text-primary"
                     : "border-border hover:bg-accent text-muted-foreground"
@@ -124,7 +138,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
 
           {/* Connection Status Details */}
-          <div className="p-3 rounded-lg bg-muted/50 border border-border/50 text-xs space-y-1">
+          <div className="p-3 rounded-lg bg-muted/40 border border-border/50 text-xs space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status:</span>
               <span className="font-medium capitalize">{connectionState}</span>
@@ -147,17 +161,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
+          <DialogFooter className="pt-2">
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium rounded-lg text-muted-foreground hover:bg-accent cursor-pointer"
+              className="text-xs"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-xs"
+              size="sm"
+              className="gap-1.5 text-xs font-medium"
             >
               {saved ? (
                 <>
@@ -170,10 +187,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   Save & Connect
                 </>
               )}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
