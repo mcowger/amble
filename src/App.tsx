@@ -1,15 +1,18 @@
 import React, { useState } from "react";
 import { ThemeProvider } from "./context/ThemeContext";
 import { PaseoProvider } from "./context/PaseoContext";
-import { WorkspaceProvider } from "./context/WorkspaceContext";
+import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
 import { AppShell } from "./components/layout/AppShell";
+import { WorkspaceTabsRow } from "./components/layout/WorkspaceTabsRow";
 import { ChatTimeline } from "./components/chat/ChatTimeline";
+import { TerminalView } from "./components/terminal/TerminalView";
 import { PromptComposer } from "./components/composer/PromptComposer";
 import { BottomDrawer } from "./components/drawers/BottomDrawer";
 import "./index.css";
 
 function WorkspaceMain() {
   const [composerPrompt, setComposerPrompt] = useState("");
+  const { activeTab } = useWorkspace();
 
   const handleSelectPrompt = (prompt: string) => {
     setComposerPrompt(prompt);
@@ -18,11 +21,25 @@ function WorkspaceMain() {
   return (
     <AppShell drawer={<BottomDrawer />}>
       <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">
-        {/* Chat Timeline */}
-        <ChatTimeline onSelectPrompt={handleSelectPrompt} />
+        {/* Workspace Tabs Row */}
+        <WorkspaceTabsRow />
 
-        {/* Prompt Composer */}
-        <PromptComposer initialValue={composerPrompt} />
+        {/* Tab Content */}
+        {activeTab?.kind === "terminal" ? (
+          <TerminalView
+            key={activeTab.id}
+            slot={activeTab.slot ?? 0}
+            terminalId={activeTab.targetId}
+          />
+        ) : (
+          <>
+            {/* Chat Timeline */}
+            <ChatTimeline onSelectPrompt={handleSelectPrompt} />
+
+            {/* Prompt Composer */}
+            <PromptComposer initialValue={composerPrompt} />
+          </>
+        )}
       </div>
     </AppShell>
   );

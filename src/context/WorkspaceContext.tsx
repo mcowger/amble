@@ -19,6 +19,17 @@ import type {
   AgentPermissionRequest,
 } from "../lib/paseo/types";
 
+export type ActiveTabKind = "agent" | "terminal";
+
+export interface WorkspaceTabItem {
+  id: string;
+  kind: ActiveTabKind;
+  targetId: string;
+  slot?: number;
+  title: string;
+  status?: "idle" | "running" | "paused" | "completed" | "failed" | "canceled";
+}
+
 interface WorkspaceContextType {
   projects: ProjectItem[];
   workspaces: WorkspaceItem[];
@@ -33,6 +44,15 @@ interface WorkspaceContextType {
   activeAgent: AgentSnapshot | null;
   setActiveAgentId: (id: string | null) => void;
   refreshAgents: () => Promise<void>;
+
+  workspaceTabs: WorkspaceTabItem[];
+  activeTab: WorkspaceTabItem | null;
+  setActiveTab: (tab: WorkspaceTabItem | { kind: ActiveTabKind; targetId: string }) => void;
+  closeTab: (tab: WorkspaceTabItem) => Promise<void>;
+  createAgentTab: (initialPrompt?: string) => Promise<AgentSnapshot | null>;
+  createTerminalTab: () => Promise<void>;
+  archiveAgentSession: (agentId: string) => Promise<void>;
+  killTerminalSession: (terminalId: string) => Promise<void>;
 
   timeline: TimelineItem[];
   isTimelineLoading: boolean;
@@ -201,11 +221,78 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [terminals, setTerminals] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalSlot, setActiveTerminalSlot] = useState<number | null>(null);
 
+  const [activeTabTarget, setActiveTabTarget] = useState<{
+    kind: ActiveTabKind;
+    targetId: string;
+  } | null>(null);
+
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const activeAgent =
     allAgents.find((a) => a.id === activeAgentId) ||
     agents.find((a) => a.id === activeAgentId) ||
     null;
+
+  const workspaceTabs = useMemo<WorkspaceTabItem[]>(() => {
+    const tabs: WorkspaceTabItem[] = [];
+
+    // Agent tabs in active workspace
+    const workspaceAgents = activeWorkspaceId
+      ? allAgents.filter((a) => a.workspaceId === activeWorkspaceId)
+      : allAgents;
+
+    for (const a of workspaceAgents) {
+      tabs.push({
+        id: `agent:${a.id}`,
+        kind: "agent",
+        targetId: a.id,
+        title: a.title || a.name || "Untitled Session",
+        status: a.status,
+      });
+    }
+
+    // If activeAgent is not yet in tabs, ensure it appears
+    if (activeAgent && !tabs.some((t) => t.targetId === activeAgent.id)) {
+      tabs.unshift({
+        id: `agent:${activeAgent.id}`,
+        kind: "agent",
+        targetId: activeAgent.id,
+        title: activeAgent.title || activeAgent.name || "Untitled Session",
+        status: activeAgent.status,
+      });
+    }
+
+    // Terminal tabs
+    for (const t of terminals) {
+      tabs.push({
+        id: `terminal:${t.id}`,
+        kind: "terminal",
+        targetId: t.id,
+        slot: t.slot,
+        title: t.title || `Terminal ${t.slot + 1}`,
+      });
+    }
+
+    return tabs;
+  }, [activeWorkspaceId, allAgents, activeAgent, terminals]);
+
+  const activeTab = useMemo<WorkspaceTabItem | null>(() => {
+    if (activeTabTarget) {
+      const match = workspaceTabs.find(
+        (t) => t.kind === activeTabTarget.kind && t.targetId === activeTabTarget.targetId,
+      );
+      if (match) return match;
+    }
+
+    // Default to active agent tab if available
+    if (activeAgentId) {
+      const agentTab = workspaceTabs.find(
+        (t) => t.kind === "agent" && t.targetId === activeAgentId,
+      );
+      if (agentTab) return agentTab;
+    }
+
+    return workspaceTabs[0] || null;
+  }, [activeTabTarget, workspaceTabs, activeAgentId]);
 
   const selectedModelDefinition =
     models.find((model) => model.id === selectedModel) ||
@@ -886,9 +973,92 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [allAgents]);
 
+  const setActiveTab = useCallback(
+    (tab: WorkspaceTabItem | { kind: ActiveTabKind; targetId: string }) => {
+      setActiveTabTarget({ kind: tab.kind, targetId: tab.targetId });
+      if (tab.kind === "agent") {
+        setActiveAgentIdState(tab.targetId);
+      } else if (tab.kind === "terminal") {
+        const term = terminals.find((t) => t.id === tab.targetId);
+        if (term) {
+          setActiveTerminalSlot(term.slot);
+        }
+      }
+    },
+    [terminals],
+  );
+
   const setActiveAgentId = (id: string | null) => {
     setActiveAgentIdState(id);
+    if (id) {
+      setActiveTabTarget({ kind: "agent", targetId: id });
+    }
   };
+
+  const closeTab = useCallback(
+    async (tab: WorkspaceTabItem): Promise<void> => {
+      try {
+        if (tab.kind === "agent") {
+          await client.archiveAgent(tab.targetId);
+          await refreshAgents();
+          if (activeTab?.targetId === tab.targetId) {
+            const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
+            if (remaining.length > 0) {
+              setActiveTab(remaining[0]!);
+            } else {
+              setActiveTabTarget(null);
+              setActiveAgentIdState(null);
+            }
+          }
+        } else if (tab.kind === "terminal") {
+          await client.killTerminal(tab.targetId);
+          await refreshTerminals();
+          if (activeTab?.targetId === tab.targetId) {
+            const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
+            if (remaining.length > 0) {
+              setActiveTab(remaining[0]!);
+            } else {
+              setActiveTabTarget(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[WorkspaceProvider] closeTab error:", err);
+      }
+    },
+    [client, refreshAgents, refreshTerminals, activeTab, workspaceTabs, setActiveTab],
+  );
+
+  const createTerminalTab = useCallback(async (): Promise<void> => {
+    const cwd = activeWorkspace?.path;
+    try {
+      const created = await client.createTerminal({
+        workspaceId: activeWorkspaceId || undefined,
+        cwd,
+      });
+      await refreshTerminals();
+      setActiveTerminalSlot(created.slot);
+      setActiveTabTarget({ kind: "terminal", targetId: created.terminalId });
+    } catch (err) {
+      console.warn("[WorkspaceProvider] createTerminalTab error:", err);
+    }
+  }, [client, activeWorkspace, activeWorkspaceId, refreshTerminals]);
+
+  const archiveAgentSession = useCallback(
+    async (agentId: string): Promise<void> => {
+      await client.archiveAgent(agentId);
+      await refreshAgents();
+    },
+    [client, refreshAgents],
+  );
+
+  const killTerminalSession = useCallback(
+    async (terminalId: string): Promise<void> => {
+      await client.killTerminal(terminalId);
+      await refreshTerminals();
+    },
+    [client, refreshTerminals],
+  );
 
   const setSelectedModel = useCallback(
     (model: string) => {
@@ -1082,10 +1252,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setAllAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
         setAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
         setActiveAgentIdState(agent.id);
+        setActiveTabTarget({ kind: "agent", targetId: agent.id });
         setActiveWorkspaceIdState(resolvedWorkspaceId);
+        setTimeline([]);
         if (initialPrompt) {
           setIsTurnRunning(true);
         }
+        await refreshAgents();
         return agent;
       }
       return null;
@@ -1094,6 +1267,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   };
+
+  const createAgentTab = useCallback(
+    async (initialPrompt?: string): Promise<AgentSnapshot | null> => {
+      const agent = await createSession(initialPrompt, activeWorkspaceId || undefined);
+      if (agent) {
+        setActiveTabTarget({ kind: "agent", targetId: agent.id });
+      }
+      return agent;
+    },
+    [activeWorkspaceId],
+  );
 
   const cancelTurn = async () => {
     if (!activeAgentId) return;
@@ -1167,6 +1351,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeAgent,
         setActiveAgentId,
         refreshAgents,
+
+        workspaceTabs,
+        activeTab,
+        setActiveTab,
+        closeTab,
+        createAgentTab,
+        createTerminalTab,
+        archiveAgentSession,
+        killTerminalSession,
 
         timeline,
         isTimelineLoading,

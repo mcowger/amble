@@ -441,6 +441,10 @@ export class PaseoClient {
     return this.daemon.cancelAgent(agentId);
   }
 
+  public async archiveAgent(agentId: string): Promise<any> {
+    return this.daemon.archiveAgent(agentId);
+  }
+
   public async setAgentModel(
     agentId: string,
     modelId: string | null,
@@ -538,6 +542,15 @@ export class PaseoClient {
     this.terminalSlots.set(terminalId, slot);
     this.slotTerminals.set(slot, terminalId);
     return { terminalId, slot };
+  }
+
+  public async killTerminal(terminalId: string): Promise<any> {
+    const slot = this.terminalSlots.get(terminalId);
+    if (slot !== undefined) {
+      this.terminalSlots.delete(terminalId);
+      this.slotTerminals.delete(slot);
+    }
+    return this.daemon.killTerminal(terminalId);
   }
 
   public async getGitStatus(workspaceIdOrCwd: string): Promise<GitStatusSummary> {
