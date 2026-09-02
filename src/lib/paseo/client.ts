@@ -495,7 +495,7 @@ export class PaseoClient {
     cwd: string;
     provider?: string;
     model?: string;
-    mode?: string;
+    mode?: string | null;
     thinkingEffort?: string;
     initialPrompt?: string;
   }): Promise<{ agent: AgentSnapshot }> {
@@ -504,7 +504,7 @@ export class PaseoClient {
         provider: params.provider || "opencode",
         cwd: params.cwd,
         model: params.model,
-        modeId: params.mode || "build",
+        modeId: params.mode || undefined,
         thinkingOptionId: params.thinkingEffort === "off" ? undefined : params.thinkingEffort,
       },
       workspaceId: params.workspaceId,
@@ -529,6 +529,27 @@ export class PaseoClient {
 
   public async cancelAgent(agentId: string): Promise<void> {
     return this.request("cancel_agent_request", { agentId });
+  }
+
+  public async setAgentModel(
+    agentId: string,
+    modelId: string | null,
+  ): Promise<{ accepted: boolean; error?: string | null }> {
+    return this.request("set_agent_model_request", { agentId, modelId });
+  }
+
+  public async setAgentThinking(
+    agentId: string,
+    thinkingOptionId: string | null,
+  ): Promise<{ accepted: boolean; error?: string | null }> {
+    return this.request("set_agent_thinking_request", { agentId, thinkingOptionId });
+  }
+
+  public async setAgentMode(
+    agentId: string,
+    modeId: string,
+  ): Promise<{ accepted: boolean; error?: string | null }> {
+    return this.request("set_agent_mode_request", { agentId, modeId });
   }
 
   public async setAgentTimelineSubscription(agentIds: string[]): Promise<void> {

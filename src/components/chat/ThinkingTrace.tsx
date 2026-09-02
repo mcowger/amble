@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Brain, ChevronDown, ChevronRight, Sparkles, Loader2 } from "lucide-react";
 import { formatDuration } from "../../lib/utils";
 
@@ -6,16 +6,41 @@ interface ThinkingTraceProps {
   text: string;
   isStreaming?: boolean;
   durationMs?: number;
+  isExpanded?: boolean;
+  onToggle?: () => void;
 }
 
-export function ThinkingTrace({ text, isStreaming, durationMs }: ThinkingTraceProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function ThinkingTrace({
+  text,
+  isStreaming,
+  durationMs,
+  isExpanded: controlledExpanded,
+  onToggle,
+}: ThinkingTraceProps) {
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalExpanded(!internalExpanded);
+    }
+  };
+
+  // Auto-scroll thought details to bottom as new tokens arrive while streaming & expanded
+  useEffect(() => {
+    if (isStreaming && isExpanded && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [text, isStreaming, isExpanded]);
 
   return (
     <div className="my-2.5 rounded-lg border border-border/60 bg-muted/20 overflow-hidden text-xs">
       {/* Header */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={handleToggle}
         className="w-full flex items-center justify-between px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer select-none transition-colors"
       >
         <div className="flex items-center gap-2">
@@ -47,8 +72,11 @@ export function ThinkingTrace({ text, isStreaming, durationMs }: ThinkingTracePr
 
       {/* Expanded Thought Details */}
       {isExpanded && (
-        <div className="p-3 border-t border-border/40 bg-background/50 font-mono text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto">
-          {text || "No reasoning details available."}
+        <div
+          ref={contentRef}
+          className="p-3 border-t border-border/40 bg-background/50 font-mono text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto"
+        >
+          {text || (isStreaming ? "Thinking..." : "No reasoning details available.")}
         </div>
       )}
     </div>

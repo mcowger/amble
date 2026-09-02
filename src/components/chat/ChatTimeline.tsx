@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
+import React, { useEffect, useRef, useState, useLayoutEffect, useMemo } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { UserCard } from "./UserCard";
 import { AssistantMessage } from "./AssistantMessage";
@@ -30,6 +30,34 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const initialScrollDoneRef = useRef<string | null>(null);
   const prevTimelineLengthRef = useRef<number>(0);
+
+  // Track user manual expansion overrides per reasoning item index
+  const [userReasoningOverrides, setUserReasoningOverrides] = useState<Record<number, boolean>>({});
+  const prevLatestReasoningIdxRef = useRef<number>(-1);
+
+  // Find the index of the latest reasoning item in the timeline
+  const latestReasoningIndex = useMemo(() => {
+    for (let i = timeline.length - 1; i >= 0; i--) {
+      if (timeline[i]?.type === "reasoning") {
+        return i;
+      }
+    }
+    return -1;
+  }, [timeline]);
+
+  // When a new thought section begins, reset user overrides so previous collapses and new one expands
+  useEffect(() => {
+    if (latestReasoningIndex !== -1 && latestReasoningIndex !== prevLatestReasoningIdxRef.current) {
+      setUserReasoningOverrides({});
+      prevLatestReasoningIdxRef.current = latestReasoningIndex;
+    }
+  }, [latestReasoningIndex]);
+
+  // Reset overrides when switching active agent / session
+  useEffect(() => {
+    setUserReasoningOverrides({});
+    prevLatestReasoningIdxRef.current = -1;
+  }, [activeAgentId]);
 
   // Instant scroll to bottom on initial load / session switch (no animation)
   useLayoutEffect(() => {
@@ -137,8 +165,30 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                 return <UserCard key={index} item={item} />;
               case "assistant_message":
                 return <AssistantMessage key={index} item={item} />;
-              case "reasoning":
-                return <ThinkingTrace key={index} text={item.text} isStreaming={item.isStreaming} durationMs={item.durationMs} />;
+              case "reasoning": {
+                const isLatest = index === latestReasoningIndex;
+                const defaultExpanded = isLatest || Boolean(item.isStreaming);
+                const isExpanded =
+                  userReasoningOverrides[index] !== undefined
+                    ? userReasoningOverrides[index]
+                    : defaultExpanded;
+
+                return (
+                  <ThinkingTrace
+                    key={index}
+                    text={item.text}
+                    isStreaming={item.isStreaming}
+                    durationMs={item.durationMs}
+                    isExpanded={isExpanded}
+                    onToggle={() =>
+                      setUserReasoningOverrides((prev) => ({
+                        ...prev,
+                        [index]: !isExpanded,
+                      }))
+                    }
+                  />
+                );
+              }
               case "tool_call":
                 return <ToolCallItem key={index} item={item} />;
               case "todo":

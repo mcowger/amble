@@ -17,7 +17,24 @@ import {
   GitCommit,
   Layers,
   Sparkles,
+  Search,
 } from "lucide-react";
+
+function getModeIcon(modeId: string) {
+  switch (modeId.toLowerCase()) {
+    case "plan":
+      return <Brain className="w-3 h-3 text-purple-500" />;
+    case "ask":
+    case "chat":
+      return <HelpCircle className="w-3 h-3 text-blue-500" />;
+    case "debug":
+      return <Terminal className="w-3 h-3 text-amber-500" />;
+    case "review":
+      return <Search className="w-3 h-3 text-purple-500" />;
+    default:
+      return <Hammer className="w-3 h-3 text-emerald-500" />;
+  }
+}
 
 export function PromptComposer({ initialValue = "" }: { initialValue?: string }) {
   const {
@@ -27,6 +44,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     modes,
     selectedMode,
     setSelectedMode,
+    canChangeMode,
     toggleDrawer,
     refreshTimeline,
     gitStatus,
@@ -103,7 +121,21 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
   };
 
+  const modeSlashCommands: SlashCommandItem[] = canChangeMode
+    ? modes.map((m) => ({
+        name: m.id.toLowerCase(),
+        description: m.description || `Switch agent mode to ${m.name}`,
+        icon: getModeIcon(m.id),
+        action: () => {
+          setSelectedMode(m.id);
+          setPrompt("");
+          setSlashFilter(null);
+        },
+      }))
+    : [];
+
   const slashCommands: SlashCommandItem[] = [
+    ...modeSlashCommands,
     {
       name: "terminal",
       description: "Open integrated terminal drawer",
@@ -134,26 +166,6 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         setSlashFilter(null);
       },
     },
-    {
-      name: "plan",
-      description: "Switch agent mode to Plan",
-      icon: <Brain className="w-3.5 h-3.5 text-purple-500" />,
-      action: () => {
-        setSelectedMode("plan");
-        setPrompt("");
-        setSlashFilter(null);
-      },
-    },
-    {
-      name: "build",
-      description: "Switch agent mode to Build",
-      icon: <Hammer className="w-3.5 h-3.5 text-emerald-500" />,
-      action: () => {
-        setSelectedMode("build");
-        setPrompt("");
-        setSlashFilter(null);
-      },
-    },
   ];
 
   const handleSlashSelect = (cmd: SlashCommandItem) => {
@@ -177,17 +189,6 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
       const textAfterCursor = prompt.slice(cursor);
       setPrompt(`${textBeforeCursor}${textAfterCursor}`);
       setMentionFilter(null);
-    }
-  };
-
-  const getModeIcon = (modeId: string) => {
-    switch (modeId) {
-      case "plan":
-        return <Brain className="w-3 h-3 text-purple-500" />;
-      case "ask":
-        return <HelpCircle className="w-3 h-3 text-blue-500" />;
-      default:
-        return <Hammer className="w-3 h-3 text-emerald-500" />;
     }
   };
 
@@ -228,27 +229,40 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           {/* Left: Mode selector & Model / Effort */}
           <div className="flex items-center gap-1.5 flex-wrap">
             {/* Mode Pills */}
-            <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30">
-              {modes.map((m) => {
-                const isActive = m.id === selectedMode;
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedMode(m.id)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium cursor-pointer transition-colors ${
-                      isActive
-                        ? "bg-background text-foreground shadow-2xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title={m.description}
-                  >
-                    {getModeIcon(m.id)}
-                    <span className="capitalize">{m.name}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {modes.length > 0 && (
+              <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30">
+                {modes.map((m) => {
+                  const isActive = m.id === selectedMode;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedMode(m.id)}
+                      disabled={!canChangeMode || isActive}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        isActive
+                          ? "bg-background text-foreground shadow-2xs font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
+                      } ${
+                        canChangeMode && !isActive
+                          ? "cursor-pointer"
+                          : "cursor-default opacity-85"
+                      }`}
+                      title={
+                        canChangeMode
+                          ? m.description || `Switch to ${m.name}`
+                          : modes.length <= 1
+                          ? `Mode: ${m.name}`
+                          : "This provider does not support changing modes"
+                      }
+                    >
+                      {getModeIcon(m.id)}
+                      <span>{m.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Model & Effort */}
             <ModelSelector />

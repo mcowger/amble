@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { usePaseo } from "./PaseoContext";
 import type {
   WorkspaceItem,
@@ -37,8 +37,9 @@ interface WorkspaceContextType {
   setSelectedModel: (model: string) => void;
   
   modes: AgentMode[];
-  selectedMode: string;
+  selectedMode: string | null;
   setSelectedMode: (mode: string) => void;
+  canChangeMode: boolean;
 
   thinkingEffort: string;
   setThinkingEffort: (effort: string) => void;
@@ -70,6 +71,72 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
+export function resolveCanonicalModelId(
+  modelId: string | null | undefined,
+  modelsList: AgentModel[],
+): string {
+  if (!modelId) {
+    return modelsList[0]?.id || "plexus/gemini-3.1-pro-preview";
+  }
+
+  // 1. Exact match by id (e.g. "plexus/gpt-5.6-luna")
+  const exact = modelsList.find((m) => m.id === modelId);
+  if (exact) return exact.id;
+
+  // 2. Match without prefix or with different prefix (e.g. "gpt-5.6-luna" or "opencode/gpt-5.6-luna")
+  const stripped = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  const suffixMatch = modelsList.find(
+    (m) =>
+      m.id === stripped ||
+      m.id.endsWith(`/${stripped}`) ||
+      m.id.replace(/^[^/]+\//, "") === stripped,
+  );
+  if (suffixMatch) return suffixMatch.id;
+
+  // 3. Match by name or metadata modelId
+  const nameMatch = modelsList.find(
+    (m) =>
+      m.name.toLowerCase() === modelId.toLowerCase() ||
+      m.displayName?.toLowerCase() === modelId.toLowerCase() ||
+      (m as any).metadata?.modelId === stripped,
+  );
+  if (nameMatch) return nameMatch.id;
+
+  // 4. If no slash, default to plexus/ prefix if registered in snapshot
+  if (!modelId.includes("/")) {
+    const candidate = `plexus/${modelId}`;
+    if (modelsList.some((m) => m.id === candidate)) {
+      return candidate;
+    }
+  }
+
+  return modelId;
+}
+
+function normalizeMode(mode: any): AgentMode {
+  return {
+    id: mode.id,
+    name: mode.name || mode.label || mode.id,
+    description: mode.description,
+    icon: mode.icon,
+    colorTier: mode.colorTier,
+  };
+}
+
+function normalizeAgentSnapshot(agent: any): AgentSnapshot {
+  const availableModes = Array.isArray(agent.availableModes)
+    ? agent.availableModes.map(normalizeMode)
+    : agent.availableModes;
+
+  const currentModeId = agent.currentModeId ?? agent.mode ?? null;
+
+  return {
+    ...agent,
+    currentModeId,
+    availableModes,
+  };
+}
+
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { client, connectionState } = usePaseo();
 
@@ -83,12 +150,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [isTimelineLoading, setIsTimelineLoading] = useState<boolean>(false);
 
   const [models, setModels] = useState<AgentModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>("plexus/gemini-3.7-flash");
+  const [selectedModel, setSelectedModelState] = useState<string>("plexus/gemini-3.7-flash");
 
-  const [modes, setModes] = useState<AgentMode[]>([]);
-  const [selectedMode, setSelectedMode] = useState<string>("build");
+  const [selectedMode, setSelectedModeState] = useState<string | null>(null);
 
-  const [thinkingEffort, setThinkingEffort] = useState<string>("medium");
+  const [thinkingEffort, setThinkingEffortState] = useState<string>("medium");
 
   const [isTurnRunning, setIsTurnRunning] = useState<boolean>(false);
 
@@ -103,6 +169,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const activeAgent = agents.find((a) => a.id === activeAgentId) || null;
+  const selectedModelDefinition =
+    models.find((model) => model.id === selectedModel) ||
+    models.find((model) => model.id === resolveCanonicalModelId(selectedModel, models));
+  const modes = useMemo(() => {
+    if (activeAgent) {
+      if (activeAgent.availableModes && activeAgent.availableModes.length > 0) {
+        return activeAgent.availableModes;
+      }
+      if (activeAgent.currentModeId) {
+        return [
+          {
+            id: activeAgent.currentModeId,
+            name: activeAgent.currentModeId,
+            description: "Active mode for this session",
+          },
+        ];
+      }
+      return [];
+    }
+    return selectedModelDefinition?.availableModes ?? [];
+  }, [activeAgent, selectedModelDefinition]);
+
+  const canChangeMode =
+    modes.length > 1 && (!activeAgent || activeAgent.capabilities?.supportsDynamicModes === true);
 
   // Refresh workspaces
   const refreshWorkspaces = useCallback(async () => {
@@ -155,13 +245,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (res && Array.isArray(res.entries)) {
         for (const entry of res.entries) {
           if (entry.agent) {
-            list.push(entry.agent);
+            list.push(normalizeAgentSnapshot(entry.agent));
           } else if (entry.id) {
-            list.push(entry);
+            list.push(normalizeAgentSnapshot(entry));
           }
         }
       } else if (res && Array.isArray(res.agents)) {
-        list.push(...res.agents);
+        list.push(...res.agents.map(normalizeAgentSnapshot));
       }
 
       setAgents(list);
@@ -215,8 +305,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const thinkingSets = compact.thinkingSets || [];
 
       const parsedModels: AgentModel[] = [];
-      const parsedModes: AgentMode[] = [];
-
       for (const p of providerEntries) {
         if (p.enabled === false) continue;
 
@@ -233,6 +321,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               name: m.label || m.name || m.id,
               displayName: m.label || m.name,
               provider: m.metadata?.providerId || p.provider || "custom",
+              agentProvider: p.provider || "opencode",
               providerName: m.metadata?.providerName || p.label || p.provider,
               description: m.description,
               contextWindow: m.metadata?.contextWindowMaxTokens || m.contextWindow,
@@ -240,41 +329,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               reasoningSupported: thinkingSetIdx >= 0,
               thinkingSetIndex: thinkingSetIdx,
               thinkingOptions: tSet,
+              availableModes: Array.isArray(p.modes) ? p.modes.map(normalizeMode) : [],
+              defaultModeId: p.defaultModeId ?? null,
               cost: m.metadata?.cost,
             });
-          }
-        }
-
-        if (Array.isArray(p.modes)) {
-          for (const mode of p.modes) {
-            if (!parsedModes.some((existing) => existing.id === mode.id)) {
-              parsedModes.push({
-                id: mode.id,
-                name: mode.label || mode.name || mode.id,
-                description: mode.description,
-                icon: mode.icon,
-                colorTier: mode.colorTier,
-              });
-            }
           }
         }
       }
 
       if (parsedModels.length > 0) {
         setModels(parsedModels);
-        setSelectedModel((prev) => {
+        setSelectedModelState((prev) => {
           const exists = parsedModels.some((m) => m.id === prev);
           return exists ? prev : (parsedModels[0]?.id ?? prev);
         });
       }
 
-      if (parsedModes.length > 0) {
-        setModes(parsedModes);
-        setSelectedMode((prev) => {
-          const exists = parsedModes.some((m) => m.id === prev);
-          return exists ? prev : (parsedModes[0]?.id ?? prev);
-        });
-      }
     } catch (err) {
       console.warn("[WorkspaceProvider] refreshProviders error:", err);
     }
@@ -337,6 +407,47 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeAgentId, connectionState, refreshTimeline, client, activeAgent]);
 
+  useEffect(() => {
+    if (!activeAgent) return;
+
+    if (activeAgent.model) {
+      const canonical = resolveCanonicalModelId(activeAgent.model, models);
+      setSelectedModelState(canonical);
+
+      if (
+        activeAgent.provider === "opencode" &&
+        !activeAgent.model.includes("/") &&
+        canonical !== activeAgent.model
+      ) {
+        client.setAgentModel(activeAgent.id, canonical).catch((err) => {
+          console.warn("[WorkspaceProvider] Failed to auto-canonicalize agent model:", err);
+        });
+      }
+    }
+    if ("currentModeId" in activeAgent || "mode" in (activeAgent as any)) {
+      setSelectedModeState(activeAgent.currentModeId ?? (activeAgent as any).mode ?? null);
+    }
+    if ("effectiveThinkingOptionId" in activeAgent || "thinkingOptionId" in activeAgent) {
+      setThinkingEffortState(activeAgent.effectiveThinkingOptionId ?? activeAgent.thinkingOptionId ?? "off");
+    }
+  }, [activeAgent, models, client]);
+
+  useEffect(() => {
+    if (activeAgent) return;
+
+    const availableModes = selectedModelDefinition?.availableModes ?? [];
+    setSelectedModeState((previousMode) => {
+      if (previousMode && availableModes.some((mode) => mode.id === previousMode)) {
+        return previousMode;
+      }
+
+      const defaultMode = selectedModelDefinition?.defaultModeId;
+      return defaultMode && availableModes.some((mode) => mode.id === defaultMode)
+        ? defaultMode
+        : (availableModes[0]?.id ?? null);
+    });
+  }, [activeAgent, selectedModelDefinition]);
+
   // Listen to live agent stream and updates
   useEffect(() => {
     const unsubStream = client.on("agent_stream", (payload: any) => {
@@ -351,19 +462,35 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       if (event.type === "turn_started") {
         setIsTurnRunning(true);
+      } else if (event.type === "mode_changed" && streamAgentId) {
+        setAgents((previousAgents) =>
+          previousAgents.map((agent) =>
+            agent.id === streamAgentId
+              ? {
+                  ...agent,
+                  currentModeId: event.currentModeId ?? null,
+                  availableModes: Array.isArray(event.availableModes)
+                    ? event.availableModes.map(normalizeMode)
+                    : agent.availableModes,
+                }
+              : agent,
+          ),
+        );
       } else if (
         event.type === "turn_completed" ||
         event.type === "turn_failed" ||
         event.type === "turn_canceled"
       ) {
         setIsTurnRunning(false);
-        // Mark all reasoning blocks as non-streaming
+        // Mark all reasoning blocks as non-streaming and capture duration
         setTimeline((prev) =>
-          prev.map((item) =>
-            item.type === "reasoning" && item.isStreaming
-              ? { ...item, isStreaming: false }
-              : item,
-          ),
+          prev.map((item) => {
+            if (item.type === "reasoning" && (item as any).isStreaming) {
+              const dur = (item as any).startedAt ? Date.now() - (item as any).startedAt : item.durationMs;
+              return { ...item, isStreaming: false, durationMs: dur };
+            }
+            return item;
+          }),
         );
         // Refresh agent list and timeline state when turn completes
         refreshAgents();
@@ -372,6 +499,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
         setTimeline((prev) => {
           const next = [...prev];
+
+          // Helper to stop streaming on prior reasoning items
+          const endPriorReasoningStreaming = () => {
+            for (let i = 0; i < next.length; i++) {
+              const prevItem = next[i];
+              if (prevItem && prevItem.type === "reasoning" && (prevItem as any).isStreaming) {
+                const dur = (prevItem as any).startedAt ? Date.now() - (prevItem as any).startedAt : (prevItem as any).durationMs;
+                next[i] = { ...prevItem, isStreaming: false, durationMs: dur };
+              }
+            }
+          };
 
           // 1. Tool Calls
           if (item.type === "tool_call" && item.callId) {
@@ -382,11 +520,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               next[idx] = { ...next[idx], ...item };
               return next;
             }
+            endPriorReasoningStreaming();
             return [...next, item];
           }
 
           // 2. Assistant Messages (smart cumulative vs delta streaming)
           if (item.type === "assistant_message") {
+            endPriorReasoningStreaming();
             const msgId = item.messageId;
             if (msgId) {
               const idx = next.findIndex(
@@ -436,13 +576,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               }
 
               next[lastIdx] = {
+                ...last,
                 ...item,
                 text: nextText,
                 isStreaming: true,
+                startedAt: (last as any).startedAt || Date.now(),
               };
               return next;
             }
-            return [...next, { ...item, isStreaming: true }];
+
+            // A brand new thought section has begun! Mark prior reasoning blocks as finished
+            endPriorReasoningStreaming();
+            return [...next, { ...item, isStreaming: true, startedAt: Date.now() }];
           }
 
           // 4. User Messages (correlate optimistic sends)
@@ -475,7 +620,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     });
 
     const unsubAgentUpdate = client.on("agent_update", (payload: any) => {
-      const agent = payload.agent || payload;
+      const agent = normalizeAgentSnapshot(payload.agent || payload);
       if (agent && agent.id) {
         setAgents((prev) => {
           const idx = prev.findIndex((a) => a.id === agent.id);
@@ -513,6 +658,76 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setActiveAgentIdState(id);
   };
 
+  const setSelectedModel = useCallback(
+    (model: string) => {
+      const canonical = resolveCanonicalModelId(model, models);
+      const previousModel = selectedModel;
+      setSelectedModelState(canonical);
+      if (!activeAgentId) return;
+
+      void client
+        .setAgentModel(activeAgentId, canonical)
+        .then((response) => {
+          if (!response.accepted) {
+            throw new Error(response.error || "Paseo rejected the model change");
+          }
+          return refreshAgents();
+        })
+        .catch((error) => {
+          console.warn("[WorkspaceProvider] setAgentModel error:", error);
+          setSelectedModelState((current) => (current === canonical ? previousModel : current));
+        });
+    },
+    [activeAgentId, client, models, refreshAgents, selectedModel],
+  );
+
+  const setSelectedMode = useCallback(
+    (mode: string) => {
+      if (!modes.some((availableMode) => availableMode.id === mode)) return;
+      if (activeAgent && !activeAgent.capabilities?.supportsDynamicModes) return;
+
+      const previousMode = selectedMode;
+      setSelectedModeState(mode);
+      if (!activeAgentId) return;
+
+      void client
+        .setAgentMode(activeAgentId, mode)
+        .then((response) => {
+          if (!response.accepted) {
+            throw new Error(response.error || "Paseo rejected the mode change");
+          }
+          return refreshAgents();
+        })
+        .catch((error) => {
+          console.warn("[WorkspaceProvider] setAgentMode error:", error);
+          setSelectedModeState((current) => (current === mode ? previousMode : current));
+        });
+    },
+    [activeAgent, activeAgentId, client, modes, refreshAgents, selectedMode],
+  );
+
+  const setThinkingEffort = useCallback(
+    (effort: string) => {
+      const previousEffort = thinkingEffort;
+      setThinkingEffortState(effort);
+      if (!activeAgentId) return;
+
+      void client
+        .setAgentThinking(activeAgentId, effort === "off" ? null : effort)
+        .then((response) => {
+          if (!response.accepted) {
+            throw new Error(response.error || "Paseo rejected the thinking change");
+          }
+          return refreshAgents();
+        })
+        .catch((error) => {
+          console.warn("[WorkspaceProvider] setAgentThinking error:", error);
+          setThinkingEffortState((current) => (current === effort ? previousEffort : current));
+        });
+    },
+    [activeAgentId, client, refreshAgents, thinkingEffort],
+  );
+
   const sendMessage = async (text: string, attachments?: string[]) => {
     let targetAgentId = activeAgentId;
 
@@ -520,6 +735,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const created = await createSession(text);
       if (created) return;
       throw new Error("No active session to send message to");
+    }
+
+    const canonical = resolveCanonicalModelId(selectedModel, models);
+    if (activeAgent && activeAgent.id === targetAgentId && canonical) {
+      const agentModel = activeAgent.model;
+      if (!agentModel || agentModel !== canonical) {
+        await client.setAgentModel(targetAgentId, canonical).catch((err) => {
+          console.warn("[WorkspaceProvider] Failed to sync model before send:", err);
+        });
+      }
     }
 
     // Optimistically add user message to timeline
@@ -576,23 +801,25 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Could not find or open workspace");
       }
 
+      const canonicalModel = resolveCanonicalModelId(selectedModel, models);
       const res = await client.createAgent({
         workspaceId: resolvedWorkspaceId,
         cwd,
-        provider: "opencode",
-        model: selectedModel,
+        provider: selectedModelDefinition?.agentProvider || "opencode",
+        model: canonicalModel,
         mode: selectedMode,
         thinkingEffort,
         initialPrompt,
       });
 
       if (res && res.agent) {
-        setAgents((prev) => [res.agent, ...prev]);
-        setActiveAgentIdState(res.agent.id);
+        const agent = normalizeAgentSnapshot(res.agent);
+        setAgents((prev) => [agent, ...prev]);
+        setActiveAgentIdState(agent.id);
         if (initialPrompt) {
           setIsTurnRunning(true);
         }
-        return res.agent;
+        return agent;
       }
       return null;
     } catch (err) {
@@ -683,6 +910,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         modes,
         selectedMode,
         setSelectedMode,
+        canChangeMode,
 
         thinkingEffort,
         setThinkingEffort,

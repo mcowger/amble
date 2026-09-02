@@ -80,6 +80,7 @@ export interface AgentModel {
   id: string;
   name: string;
   provider: string;
+  agentProvider?: string;
   providerName?: string;
   displayName?: string;
   description?: string;
@@ -88,6 +89,8 @@ export interface AgentModel {
   reasoningSupported?: boolean;
   thinkingSetIndex?: number;
   thinkingOptions?: Array<{ id: string; label: string; isDefault?: boolean }>;
+  availableModes?: AgentMode[];
+  defaultModeId?: string | null;
   cost?: {
     input: number;
     output: number;
@@ -105,13 +108,19 @@ export interface AgentMode {
 
 export interface AgentSnapshot {
   id: string;
+  provider?: string;
   workspaceId?: string;
   name?: string;
   title?: string;
   status: "idle" | "running" | "paused" | "completed" | "failed" | "canceled";
-  model?: string;
-  mode?: string;
-  thinkingEffort?: string;
+  model?: string | null;
+  currentModeId?: string | null;
+  thinkingOptionId?: string | null;
+  effectiveThinkingOptionId?: string | null;
+  capabilities?: {
+    supportsDynamicModes?: boolean;
+  };
+  availableModes?: AgentMode[];
   createdAt: string;
   updatedAt: string;
   activeTurnId?: string;
@@ -149,6 +158,7 @@ export interface ReasoningTimelineItem {
   text: string;
   isStreaming?: boolean;
   durationMs?: number;
+  startedAt?: number;
 }
 
 export interface ToolCallTimelineItem {

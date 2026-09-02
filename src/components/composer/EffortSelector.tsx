@@ -6,7 +6,9 @@ export function EffortSelector() {
   const { models, selectedModel, thinkingEffort, setThinkingEffort } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
 
-  const activeModel = models.find((m) => m.id === selectedModel);
+  const activeModel =
+    models.find((m) => m.id === selectedModel) ||
+    models.find((m) => m.id.endsWith(`/${selectedModel}`));
 
   const options =
     activeModel?.thinkingOptions && activeModel.thinkingOptions.length > 0

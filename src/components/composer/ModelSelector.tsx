@@ -8,13 +8,15 @@ export function ModelSelector() {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const current = models.find((m) => m.id === selectedModel) || {
-    id: selectedModel,
-    name: selectedModel.replace(/^plexus\//, ""),
-    displayName: selectedModel.replace(/^plexus\//, ""),
-    provider: "custom",
-    providerName: "Plexus",
-  };
+  const current =
+    models.find((m) => m.id === selectedModel) ||
+    models.find((m) => m.id.endsWith(`/${selectedModel}`)) || {
+      id: selectedModel,
+      name: selectedModel.replace(/^plexus\//, ""),
+      displayName: selectedModel.replace(/^plexus\//, ""),
+      provider: "custom",
+      providerName: "Plexus",
+    };
 
   const filteredModels = useMemo(() => {
     if (!searchQuery.trim()) return models;
@@ -94,7 +96,10 @@ export function ModelSelector() {
                 </div>
               ) : (
                 filteredModels.map((model) => {
-                  const isSelected = model.id === selectedModel;
+                  const isSelected =
+                    model.id === selectedModel ||
+                    selectedModel.endsWith(`/${model.id}`) ||
+                    model.id.endsWith(`/${selectedModel}`);
                   const badge = getProviderBadge(model.providerName || model.provider);
 
                   return (

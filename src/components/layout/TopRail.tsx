@@ -27,6 +27,7 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
     activeWorkspace,
     setActiveWorkspaceId,
     activeAgent,
+    models,
     selectedModel,
     selectedMode,
     thinkingEffort,
@@ -123,9 +124,19 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
         {/* Model & Mode Indicators for Desktop */}
         <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 border border-border/30 px-2.5 py-1 rounded-full">
           <Sparkles className="w-3 h-3 text-amber-500" />
-          <span className="font-medium text-foreground">{selectedModel}</span>
-          <span className="text-muted-foreground/40">•</span>
-          <span className="capitalize">{selectedMode}</span>
+          <span className="font-medium text-foreground">
+            {models.find((m) => m.id === selectedModel)?.displayName ||
+              models.find((m) => m.id.endsWith(`/${selectedModel}`))?.displayName ||
+              models.find((m) => m.id === selectedModel)?.name ||
+              models.find((m) => m.id.endsWith(`/${selectedModel}`))?.name ||
+              selectedModel.replace(/^plexus\//, "")}
+          </span>
+          {selectedMode && (
+            <>
+              <span className="text-muted-foreground/40">•</span>
+              <span className="capitalize">{selectedMode}</span>
+            </>
+          )}
           {thinkingEffort && (
             <>
               <span className="text-muted-foreground/40">•</span>
