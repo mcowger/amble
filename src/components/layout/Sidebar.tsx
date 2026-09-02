@@ -233,11 +233,21 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
   };
 
   const handleSelectProject = (project: ProjectItem, directWorkspace?: WorkspaceItem) => {
-    if (directWorkspace) {
-      setActiveWorkspaceId(directWorkspace.id);
-    } else {
-      setActiveWorkspaceId(project.id);
-    }
+    const wsId = directWorkspace?.id || project.id;
+    setActiveWorkspaceId(wsId);
+
+    // Find if this project has any active sessions in its workspaces
+    const projectWorkspaces = workspaces.filter(
+      (w) =>
+        w.projectId === project.id ||
+        (project.projectKey && w.projectId === project.projectKey) ||
+        (project.rootPath && w.path === project.rootPath),
+    );
+    const firstAgent = allAgents.find((a) =>
+      projectWorkspaces.some((w) => w.id === a.workspaceId),
+    );
+    setActiveAgentId(firstAgent ? firstAgent.id : null);
+
     if (onCloseMobile) {
       onCloseMobile();
     }

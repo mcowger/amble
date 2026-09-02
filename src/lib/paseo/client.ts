@@ -514,6 +514,7 @@ export class PaseoClient {
           rows: 24,
           cols: 80,
           cwd: res.cwd,
+          workspaceId: t.workspaceId || workspaceId,
         });
       }
     }

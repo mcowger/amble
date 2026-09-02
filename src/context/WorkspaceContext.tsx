@@ -99,7 +99,7 @@ interface WorkspaceContextType {
   activeTerminalSlot: number | null;
   setActiveTerminalSlot: (slot: number | null) => void;
   createTerminal: () => Promise<number | null>;
-  refreshTerminals: () => Promise<void>;
+  refreshTerminals: (workspaceId?: string) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -226,19 +226,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     targetId: string;
   } | null>(null);
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const activeAgent =
     allAgents.find((a) => a.id === activeAgentId) ||
     agents.find((a) => a.id === activeAgentId) ||
     null;
 
+  // Resolve active workspace strictly: from active agent if present, or activeWorkspaceId
+  const resolvedWorkspaceId = activeAgent?.workspaceId || activeWorkspaceId;
+  const activeWorkspace = workspaces.find((w) => w.id === resolvedWorkspaceId) || null;
+
+  // Keep activeWorkspaceId in sync whenever activeAgent belongs to a specific workspace
+  useEffect(() => {
+    if (activeAgent?.workspaceId && activeAgent.workspaceId !== activeWorkspaceId) {
+      setActiveWorkspaceIdState(activeAgent.workspaceId);
+    }
+  }, [activeAgent?.workspaceId, activeWorkspaceId]);
+
   const workspaceTabs = useMemo<WorkspaceTabItem[]>(() => {
+    if (!resolvedWorkspaceId) return [];
+
     const tabs: WorkspaceTabItem[] = [];
 
-    // Agent tabs in active workspace
-    const workspaceAgents = activeWorkspaceId
-      ? allAgents.filter((a) => a.workspaceId === activeWorkspaceId)
-      : allAgents;
+    // ONLY agents that belong to resolvedWorkspaceId
+    const workspaceAgents = allAgents.filter((a) => a.workspaceId === resolvedWorkspaceId);
 
     for (const a of workspaceAgents) {
       tabs.push({
@@ -250,19 +260,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // If activeAgent is not yet in tabs, ensure it appears
-    if (activeAgent && !tabs.some((t) => t.targetId === activeAgent.id)) {
-      tabs.unshift({
-        id: `agent:${activeAgent.id}`,
-        kind: "agent",
-        targetId: activeAgent.id,
-        title: activeAgent.title || activeAgent.name || "Untitled Session",
-        status: activeAgent.status,
-      });
-    }
+    // ONLY terminals that belong to resolvedWorkspaceId
+    const workspaceTerminals = terminals.filter((t) => {
+      if (t.workspaceId) return t.workspaceId === resolvedWorkspaceId;
+      if (activeWorkspace?.path && t.cwd) return t.cwd === activeWorkspace.path;
+      return false;
+    });
 
-    // Terminal tabs
-    for (const t of terminals) {
+    for (const t of workspaceTerminals) {
       tabs.push({
         id: `terminal:${t.id}`,
         kind: "terminal",
@@ -273,7 +278,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
 
     return tabs;
-  }, [activeWorkspaceId, allAgents, activeAgent, terminals]);
+  }, [resolvedWorkspaceId, allAgents, terminals, activeWorkspace]);
 
   const activeTab = useMemo<WorkspaceTabItem | null>(() => {
     if (activeTabTarget) {
@@ -598,20 +603,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [client, activeWorkspace]);
 
   // Refresh terminals
-  const refreshTerminals = useCallback(async () => {
-    if (client.getState() !== "connected") return;
-    try {
-      const res = await client.listTerminals(activeWorkspaceId || undefined);
-      if (res && Array.isArray(res.terminals)) {
-        setTerminals(res.terminals);
-        if (res.terminals.length > 0 && activeTerminalSlot === null) {
-          setActiveTerminalSlot(res.terminals[0]!.slot);
+  const refreshTerminals = useCallback(
+    async (targetWorkspaceId?: string) => {
+      if (client.getState() !== "connected") return;
+      const wsId = targetWorkspaceId || resolvedWorkspaceId;
+      try {
+        const res = await client.listTerminals(wsId || undefined);
+        if (res && Array.isArray(res.terminals)) {
+          setTerminals(res.terminals);
+          if (res.terminals.length > 0 && activeTerminalSlot === null) {
+            setActiveTerminalSlot(res.terminals[0]!.slot);
+          }
+        } else {
+          setTerminals([]);
         }
+      } catch (err) {
+        console.warn("[WorkspaceProvider] listTerminals error:", err);
       }
-    } catch (err) {
-      console.warn("[WorkspaceProvider] listTerminals error:", err);
-    }
-  }, [client, activeWorkspaceId, activeTerminalSlot]);
+    },
+    [client, resolvedWorkspaceId, activeTerminalSlot],
+  );
 
   // On connection state change to connected
   useEffect(() => {
@@ -624,11 +635,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // When active workspace changes
   useEffect(() => {
-    if (activeWorkspaceId && connectionState === "connected") {
+    if (resolvedWorkspaceId && connectionState === "connected") {
       refreshAgents();
       refreshGitStatus();
+      refreshTerminals(resolvedWorkspaceId);
     }
-  }, [activeWorkspaceId, connectionState, refreshAgents, refreshGitStatus]);
+  }, [resolvedWorkspaceId, connectionState, refreshAgents, refreshGitStatus, refreshTerminals]);
 
   // When active agent changes
   useEffect(() => {

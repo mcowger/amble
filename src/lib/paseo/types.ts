@@ -276,6 +276,7 @@ export interface TerminalSessionInfo {
   rows: number;
   cols: number;
   cwd?: string;
+  workspaceId?: string;
 }
 
 // Git Status & Diffs
