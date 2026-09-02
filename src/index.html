@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+    <title>Amble — Paseo Web UI</title>
+    <script>
+      // Safe guard for injected Web3/Brave Wallet extension scripts on non-HTTPS origins
+      if (typeof window !== "undefined" && !window.ethereum) {
+        try {
+          window.ethereum = { selectedAddress: undefined };
+        } catch (e) {}
+      }
+
+      // Suppress cross-origin and third-party injected browser extension errors from triggering Bun's overlay
+      window.addEventListener(
+        "error",
+        function (event) {
+          var msg = event && event.message ? String(event.message) : "";
+          if (
+            msg === "Script error." ||
+            msg.indexOf("ethereum") !== -1 ||
+            msg.indexOf("selectedAddress") !== -1 ||
+            (event.filename &&
+              event.filename.indexOf(window.location.host) === -1 &&
+              event.filename.indexOf("127.0.0.1") === -1 &&
+              event.filename.indexOf("localhost") === -1)
+          ) {
+            event.stopImmediatePropagation();
+            if (event.preventDefault) event.preventDefault();
+          }
+        },
+        true,
+      );
+    </script>
+    <script type="module" src="./frontend.tsx" async></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
