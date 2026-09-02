@@ -2,10 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <link rel="icon" type="image/svg+xml" href="./logo.svg" />
     <title>Amble — Paseo Web UI</title>
+
+    <!-- Immediate theme initialization to eliminate flash of unstyled content (FOUC) on load -->
     <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("amble-theme");
+          var dark =
+            t === "dark" ||
+            (!t && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) {
+            document.documentElement.classList.add("dark");
+            document.documentElement.style.backgroundColor = "#181816";
+            document.documentElement.style.colorScheme = "dark";
+          } else {
+            document.documentElement.classList.remove("dark");
+            document.documentElement.style.backgroundColor = "#fdfcfa";
+            document.documentElement.style.colorScheme = "light";
+          }
+        } catch (e) {}
+      })();
+
+      // Prevent iOS gesture auto-zoom / pinch zoom to lock fixed viewport
+      document.addEventListener("gesturestart", function (e) {
+        e.preventDefault();
+      });
+
       // Safe guard for injected Web3/Brave Wallet extension scripts on non-HTTPS origins
       if (typeof window !== "undefined" && !window.ethereum) {
         try {
@@ -34,6 +62,39 @@
         true,
       );
     </script>
+
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        touch-action: manipulation;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      html.dark, html.dark body {
+        background-color: #181816 !important;
+        color: #e5e5df !important;
+      }
+      html:not(.dark), html:not(.dark) body {
+        background-color: #fdfcfa !important;
+        color: #393a34 !important;
+      }
+
+      /* Prevent iOS Safari automatic zoom on focus by ensuring >= 16px font size on touch devices */
+      input, textarea, select {
+        font-size: 16px !important;
+        touch-action: manipulation;
+      }
+      @media (min-width: 640px) {
+        input, textarea, select {
+          font-size: 14px !important;
+        }
+      }
+    </style>
+
     <script type="module" src="./frontend.tsx" async></script>
   </head>
   <body>

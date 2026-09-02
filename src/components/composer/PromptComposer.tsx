@@ -220,7 +220,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           onKeyDown={handleKeyDown}
           placeholder="Ask Paseo to write code, debug issues, or execute commands... (type / for commands, @ for files)"
           rows={2}
-          className="w-full resize-none bg-transparent border-0 p-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden leading-relaxed max-h-56"
+          className="w-full resize-none bg-transparent border-0 p-1 text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden leading-relaxed max-h-56 touch-manipulation"
         />
 
         {/* Controls Row */}

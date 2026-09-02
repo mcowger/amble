@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { UserCard } from "./UserCard";
 import { AssistantMessage } from "./AssistantMessage";
@@ -12,7 +12,6 @@ import {
   Terminal,
   FileCode,
   Search,
-  MessageSquare,
   Loader2,
 } from "lucide-react";
 import type { TimelineItem } from "../../lib/paseo/types";
@@ -24,29 +23,55 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     isTurnRunning,
     activeAgent,
     activeWorkspace,
+    activeAgentId,
   } = useWorkspace();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const initialScrollDoneRef = useRef<string | null>(null);
+  const prevTimelineLengthRef = useRef<number>(0);
 
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    if (scrollRef.current) {
+  // Instant scroll to bottom on initial load / session switch (no animation)
+  useLayoutEffect(() => {
+    if (!scrollRef.current || timeline.length === 0) return;
+
+    const currentAgentKey = activeAgentId || "default";
+
+    if (initialScrollDoneRef.current !== currentAgentKey) {
+      initialScrollDoneRef.current = currentAgentKey;
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      prevTimelineLengthRef.current = timeline.length;
+      return;
+    }
+
+    // For active streaming / new messages during the current session:
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 160;
+
+    if (isNearBottom || isTurnRunning || timeline.length > prevTimelineLengthRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior,
+        behavior: "smooth",
       });
     }
-  };
 
-  useEffect(() => {
-    scrollToBottom("smooth");
-  }, [timeline, isTurnRunning]);
+    prevTimelineLengthRef.current = timeline.length;
+  }, [timeline, activeAgentId, isTurnRunning]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const isUp = scrollHeight - scrollTop - clientHeight > 100;
     setShowScrollBottom(isUp);
+  };
+
+  const scrollToBottomSmooth = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
   };
 
   const samplePrompts = [
@@ -146,7 +171,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
       {/* Scroll to bottom button */}
       {showScrollBottom && (
         <button
-          onClick={() => scrollToBottom("smooth")}
+          onClick={scrollToBottomSmooth}
           className="absolute bottom-4 right-8 p-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 cursor-pointer transition-all z-20"
           title="Scroll to bottom"
         >
