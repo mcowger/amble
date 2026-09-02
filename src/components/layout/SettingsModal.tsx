@@ -137,10 +137,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {serverInfo.serverId || "local"}
                   </span>
                 </div>
-                {serverInfo.daemonVersion && (
+                {serverInfo.version && (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Version:</span>
-                    <span className="font-mono text-[11px]">{serverInfo.daemonVersion}</span>
+                    <span className="font-mono text-[11px]">{serverInfo.version}</span>
                   </div>
                 )}
               </>

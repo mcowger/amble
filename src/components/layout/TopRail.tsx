@@ -42,7 +42,7 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
 
   const changedFilesCount =
-    (gitStatus?.stagedFiles.length || 0) + (gitStatus?.unstagedFiles.length || 0);
+    (gitStatus?.stagedFiles?.length || 0) + (gitStatus?.unstagedFiles?.length || 0);
 
   return (
     <header className="h-12 border-b border-border bg-sidebar/70 backdrop-blur-md px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0">

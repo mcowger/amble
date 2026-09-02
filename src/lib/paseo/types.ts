@@ -1,36 +1,60 @@
-// Wire types and data contracts for the Paseo Daemon WebSocket API
+// Wire types and protocol contracts re-exported from @getpaseo/protocol
+import {
+  TerminalStreamOpcode,
+  type TerminalStreamFrame,
+} from "@getpaseo/protocol/binary-frames/index";
+import type {
+  ServerInfoStatusPayload,
+  WSHelloMessage,
+  SessionInboundMessage,
+  SessionOutboundMessage,
+} from "@getpaseo/protocol/messages";
+import type { ClientCapability } from "@getpaseo/protocol/client-capabilities";
+import type {
+  AgentPermissionResponse,
+  AgentPermissionAction,
+  AgentPermissionRequest,
+  AgentStreamEvent,
+} from "@getpaseo/protocol/agent-types";
+
+// Terminal frame opcodes and framing from protocol
+export const TerminalOpcode = TerminalStreamOpcode;
+export type TerminalOpcode = TerminalStreamOpcode;
+export type TerminalFrame = TerminalStreamFrame;
+
+// Wire Protocol Types re-exported from @getpaseo/protocol
+export type ServerInfoPayload = ServerInfoStatusPayload;
+export type ClientCapabilities = Partial<Record<ClientCapability, unknown>> & {
+  [key: string]: unknown;
+};
+
+export type {
+  WSHelloMessage,
+  AgentPermissionResponse,
+  AgentPermissionAction,
+  AgentPermissionRequest,
+  AgentStreamEvent,
+  SessionInboundMessage,
+  SessionOutboundMessage,
+};
+
+export interface QuestionOption {
+  label: string;
+  description?: string;
+}
+
+export interface QuestionFormQuestion {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect?: boolean;
+  allowOther?: boolean;
+  allowEmpty?: boolean;
+  placeholder?: string;
+  dismissLabel?: string;
+}
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
-
-export interface ClientCapabilities {
-  custom_mode_icons?: boolean;
-  reasoning_merge_enum?: boolean;
-  terminal_reflowable_snapshot?: boolean;
-  provider_subagents?: boolean;
-  project_updates?: boolean;
-  compact_provider_snapshots?: boolean;
-  timeline_replacement_invalidation?: boolean;
-  selective_agent_timeline?: boolean;
-  [key: string]: unknown;
-}
-
-export interface WSHelloMessage {
-  type: "hello";
-  clientId: string;
-  clientType: "browser";
-  protocolVersion: 1;
-  capabilities: ClientCapabilities;
-}
-
-export interface ServerInfoPayload {
-  version?: string;
-  capabilities?: Record<string, unknown>;
-  authRequired?: boolean;
-  serverId?: string;
-  daemonVersion?: string;
-  features?: string[];
-  [key: string]: unknown;
-}
 
 export interface ServerInfoMessage {
   type: "server_info";
@@ -54,6 +78,7 @@ export interface WSInboundMessage {
   event?: string;
   [key: string]: unknown;
 }
+
 
 // Workspaces & Projects
 export interface WorkspaceItem {
@@ -121,6 +146,9 @@ export interface AgentSnapshot {
     supportsDynamicModes?: boolean;
   };
   availableModes?: AgentMode[];
+  pendingPermissions?: AgentPermissionRequest[];
+  requiresAttention?: boolean;
+  attentionReason?: string | null;
   createdAt: string;
   updatedAt: string;
   activeTurnId?: string;
@@ -202,6 +230,12 @@ export interface PermissionRequestTimelineItem {
   status: "pending" | "granted" | "denied";
 }
 
+export interface PendingPermission {
+  key: string;
+  agentId: string;
+  request: AgentPermissionRequest;
+}
+
 export type TimelineItem =
   | UserMessageTimelineItem
   | AssistantMessageTimelineItem
@@ -210,35 +244,6 @@ export type TimelineItem =
   | TodoTimelineItem
   | ErrorTimelineItem
   | PermissionRequestTimelineItem;
-
-// Agent Stream Events
-export type AgentStreamEvent =
-  | { type: "thread_started"; sessionId: string; provider: unknown }
-  | { type: "turn_started"; turnId?: string; provider: unknown }
-  | { type: "turn_completed"; turnId?: string; usage?: unknown; provider: unknown }
-  | { type: "turn_failed"; error: string; code?: string; diagnostic?: string; provider: unknown }
-  | { type: "turn_canceled"; reason: string; provider: unknown }
-  | { type: "timeline"; item: TimelineItem; turnId?: string; provider: unknown }
-  | { type: "permission_requested"; request: { id: string; tool: string; params: unknown } }
-  | { type: "permission_resolved"; requestId: string; resolution: unknown }
-  | { type: "attention_required"; reason: string; notification?: unknown };
-
-// Terminal frame opcodes
-export const TerminalOpcode = {
-  Output: 0x01,
-  Input: 0x02,
-  Resize: 0x03,
-  Snapshot: 0x04,
-  Restore: 0x05,
-} as const;
-
-export type TerminalOpcode = (typeof TerminalOpcode)[keyof typeof TerminalOpcode];
-
-export interface TerminalFrame {
-  opcode: TerminalOpcode;
-  slot: number;
-  payload: Uint8Array;
-}
 
 export interface TerminalSessionInfo {
   id: string;

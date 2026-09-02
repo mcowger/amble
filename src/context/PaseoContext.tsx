@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { PaseoClient } from "../lib/paseo/client";
 import type { ConnectionState, ServerInfoPayload } from "../lib/paseo/types";
 
@@ -40,16 +40,26 @@ export function PaseoProvider({ children }: { children: React.ReactNode }) {
   });
 
   const client = useMemo(() => {
-    return new PaseoClient({
+    const c = new PaseoClient({
       url: serverUrl,
       token: authToken || undefined,
     });
+    if (typeof window !== "undefined") {
+      (window as any).__paseoClient = c;
+    }
+    return c;
   }, [serverUrl, authToken]);
 
   const [connectionState, setConnectionState] = useState<ConnectionState>(client.getState());
   const [serverInfo, setServerInfo] = useState<ServerInfoPayload | null>(null);
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+
     const unsubState = client.on("state_change", (state: ConnectionState) => {
       setConnectionState(state);
     });
@@ -65,12 +75,17 @@ export function PaseoProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubState();
       unsubServerInfo();
-      client.disconnect();
+      // Debounce disconnect so React StrictMode's instant remount does not abort an in-flight socket handshake
+      disconnectTimerRef.current = setTimeout(() => {
+        client.disconnect();
+        disconnectTimerRef.current = null;
+      }, 150);
     };
   }, [client]);
 
   const setServerUrl = (url: string) => {
     setServerUrlState(url);
+    client.setUrl(url);
     if (typeof window !== "undefined") {
       localStorage.setItem("amble-paseo-url", url);
     }
@@ -78,13 +93,14 @@ export function PaseoProvider({ children }: { children: React.ReactNode }) {
 
   const setAuthToken = (token: string) => {
     setAuthTokenState(token);
+    client.setToken(token);
     if (typeof window !== "undefined") {
       localStorage.setItem("amble-paseo-token", token);
     }
   };
 
   const reconnect = () => {
-    client.connect().catch((err) => {
+    client.connect(true).catch((err) => {
       console.error("[PaseoProvider] Manual reconnect failed:", err);
     });
   };

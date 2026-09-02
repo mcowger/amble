@@ -1,16 +1,24 @@
+import "../crypto-polyfill";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import {
-  type ConnectionState,
-  type WSHelloMessage,
-  type ServerInfoPayload,
-  type WorkspaceItem,
-  type AgentSnapshot,
-  type TimelineItem,
-  type TerminalSessionInfo,
-  type GitStatusSummary,
-  TerminalOpcode,
+  TerminalStreamOpcode,
+  decodeTerminalStreamFrame,
+  decodeTerminalResizePayload,
+} from "@getpaseo/protocol/binary-frames/index";
+import {
+  DaemonClient,
+  type ConnectionState as DaemonConnectionState,
+} from "@getpaseo/client/internal/daemon-client";
+import { defaultWebSocketFactory } from "@getpaseo/client/internal/daemon-client-websocket-transport";
+import type {
+  ConnectionState,
+  ServerInfoPayload,
+  WorkspaceItem,
+  AgentSnapshot,
+  TerminalSessionInfo,
+  GitStatusSummary,
+  AgentPermissionResponse,
 } from "./types";
-import { decodeTerminalFrame, decodeTerminalPayloadAsString, encodeTerminalFrame } from "./binary-codec";
 
 export interface PaseoClientConfig {
   url?: string;
@@ -23,43 +31,139 @@ export interface PaseoClientConfig {
 
 export type EventHandler<T = any> = (data: T) => void;
 
+const textDecoder = new TextDecoder();
+
 export class PaseoClient {
-  private ws: WebSocket | null = null;
+  private daemon: DaemonClient;
+  private activeWs: any = null;
   private url: string;
   private token?: string;
   private clientId: string;
   private state: ConnectionState = "disconnected";
-  private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private livenessTimer: ReturnType<typeof setInterval> | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectAttempts = 0;
-  private lastActivityAt: number = Date.now();
-  private readonly maxReconnectDelay = 10000;
-  private readonly pingIntervalMs: number;
-  private readonly requestTimeoutMs: number;
-  private readonly livenessTimeoutMs = 15000;
-
-  private pendingRequests = new Map<
-    string,
-    {
-      resolve: (value: any) => void;
-      reject: (reason?: any) => void;
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-
   private eventListeners = new Map<string, Set<EventHandler>>();
   private terminalListeners = new Map<number, Set<(data: string) => void>>();
+  private terminalSlots = new Map<string, number>();
+  private slotTerminals = new Map<number, string>();
   private cleanupBrowserListeners: (() => void) | null = null;
+  private unsubscribeDaemonEvents: (() => void) | null = null;
+  private unsubscribeStatus: (() => void) | null = null;
+  private unsubscribeTerminalStream: (() => void) | null = null;
 
   constructor(config: PaseoClientConfig = {}) {
     this.url = config.url || this.getDefaultUrl();
     this.token = config.token;
     this.clientId = config.clientId || this.getOrCreateClientId();
-    this.pingIntervalMs = config.pingIntervalMs || 4000;
-    this.requestTimeoutMs = config.requestTimeoutMs || 30000;
 
+    this.daemon = this.createDaemon();
     this.setupBrowserLifecycleListeners();
+  }
+
+  private createDaemon(): DaemonClient {
+    const daemon = new DaemonClient({
+      url: this.url,
+      clientId: this.clientId,
+      clientType: "browser",
+      webSocketFactory: (url, opts) => {
+        const protocols = this.token ? [`paseo.bearer.${this.token}`] : opts?.protocols;
+        const ws = defaultWebSocketFactory(url, { ...opts, protocols });
+        this.activeWs = ws;
+
+        // If close() is called while the socket is still CONNECTING, wait for open
+        // so the browser network stack does not log an unestablished socket closure error.
+        if (typeof (ws as any).close === "function") {
+          const originalClose = (ws as any).close.bind(ws);
+          (ws as any).close = (code?: number, reason?: string) => {
+            if ((ws as any).readyState === 0) { // WebSocket.CONNECTING
+              const onCloseWhenReady = () => {
+                try {
+                  originalClose(code, reason);
+                } catch {}
+              };
+              if (typeof (ws as any).addEventListener === "function") {
+                (ws as any).addEventListener("open", onCloseWhenReady, { once: true });
+                (ws as any).addEventListener("error", onCloseWhenReady, { once: true });
+                return;
+              }
+            }
+            originalClose(code, reason);
+          };
+        }
+
+        return ws;
+      },
+      capabilities: {
+        [CLIENT_CAPS.customModeIcons]: true,
+        [CLIENT_CAPS.reasoningMergeEnum]: true,
+        [CLIENT_CAPS.terminalReflowableSnapshot]: true,
+        [CLIENT_CAPS.providerSubagents]: true,
+        [CLIENT_CAPS.projectUpdates]: true,
+        [CLIENT_CAPS.compactProviderSnapshots]: true,
+        [CLIENT_CAPS.timelineReplacementInvalidation]: true,
+        [CLIENT_CAPS.selectiveAgentTimeline]: true,
+      },
+      reconnect: {
+        enabled: true,
+        baseDelayMs: 1000,
+        maxDelayMs: 10000,
+      },
+    });
+
+    this.unsubscribeStatus = daemon.subscribeConnectionStatus((status) => {
+      const mapped = this.mapConnectionState(status);
+      if (this.state !== mapped) {
+        this.state = mapped;
+        this.emit("state_change", mapped);
+      }
+    });
+
+    this.unsubscribeDaemonEvents = daemon.on((event) => {
+      this.emit(event.type, event);
+      if (event.type === "agent_stream") {
+        this.emit("agent_stream", event);
+      } else if (event.type === "agent_update") {
+        this.emit("agent_update", event.payload || event);
+      } else if (event.type === "workspace_update") {
+        this.emit("workspace_update", event.payload || event);
+      } else if (event.type === "providers_snapshot_update") {
+        this.emit("providers_snapshot_update", event.payload || event);
+      } else if (event.type === "agent_permission_request") {
+        this.emit("agent_permission_request", event);
+      } else if (event.type === "agent_permission_resolved") {
+        this.emit("agent_permission_resolved", event);
+      } else if (event.type === "status" && (event.payload as any)?.status === "server_info") {
+        this.emit("server_info", event.payload);
+      }
+    });
+
+    this.unsubscribeTerminalStream = daemon.onTerminalStreamEvent((event) => {
+      if (event.type === "output" || event.type === "restore") {
+        const text = textDecoder.decode(event.data);
+        const slot = this.terminalSlots.get(event.terminalId);
+        if (slot !== undefined) {
+          const listeners = this.terminalListeners.get(slot);
+          if (listeners) {
+            listeners.forEach((fn) => fn(text));
+          }
+          this.emit("terminal_data", { slot, data: text });
+        }
+      }
+    });
+
+    return daemon;
+  }
+
+  private mapConnectionState(state: DaemonConnectionState): ConnectionState {
+    switch (state.status) {
+      case "connected":
+        return "connected";
+      case "connecting":
+        return state.attempt > 0 ? "reconnecting" : "connecting";
+      case "idle":
+      case "disconnected":
+      case "disposed":
+      default:
+        return "disconnected";
+    }
   }
 
   private getDefaultUrl(): string {
@@ -106,335 +210,114 @@ export class PaseoClient {
     };
   }
 
+  private cleanupDaemonSubscriptions() {
+    if (this.unsubscribeStatus) {
+      this.unsubscribeStatus();
+      this.unsubscribeStatus = null;
+    }
+    if (this.unsubscribeDaemonEvents) {
+      this.unsubscribeDaemonEvents();
+      this.unsubscribeDaemonEvents = null;
+    }
+    if (this.unsubscribeTerminalStream) {
+      this.unsubscribeTerminalStream();
+      this.unsubscribeTerminalStream = null;
+    }
+  }
+
+  private recreateDaemon(): DaemonClient {
+    this.cleanupDaemonSubscriptions();
+    try {
+      void this.daemon.close();
+    } catch {}
+    this.daemon = this.createDaemon();
+    return this.daemon;
+  }
+
   public checkConnectionLiveness() {
-    if (this.state === "disconnected") return;
-
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.log("[PaseoClient] Socket is not open on visibility restore, reconnecting...");
-      this.reconnectAttempts = 0;
-      this.scheduleReconnect(100);
-      return;
-    }
-
-    const elapsed = Date.now() - this.lastActivityAt;
-    if (elapsed > this.livenessTimeoutMs) {
-      console.log(`[PaseoClient] No socket activity for ${Math.round(elapsed / 1000)}s, recycling connection...`);
-      this.ws.close();
-    } else {
-      this.sendPing();
-    }
+    this.daemon.ensureConnected();
   }
 
   public getState(): ConnectionState {
     return this.state;
   }
 
+  public getServerInfo(): ServerInfoPayload | null {
+    return this.daemon.getLastServerInfoMessage() || null;
+  }
+
   public setToken(token?: string) {
-    this.token = token;
+    if (this.token !== token) {
+      this.token = token;
+      this.recreateDaemon();
+    }
   }
 
   public setUrl(url: string) {
-    this.url = url;
+    if (this.url !== url) {
+      this.url = url;
+      this.recreateDaemon();
+    }
   }
 
-  public connect(): Promise<ServerInfoPayload> {
-    return new Promise((resolve, reject) => {
-      this.cleanup();
-      this.setState("connecting");
-
-      try {
-        const protocols = this.token ? [`paseo.bearer.${this.token}`] : [];
-        const ws = new WebSocket(this.url, protocols);
-        ws.binaryType = "arraybuffer";
-        this.ws = ws;
-        this.lastActivityAt = Date.now();
-
-        let helloResolved = false;
-
-        const onConnectTimeout = setTimeout(() => {
-          if (!helloResolved) {
-            this.setState("error");
-            ws.close();
-            reject(new Error("Connection timed out waiting for server info"));
-          }
-        }, 12000);
-
-        ws.onopen = () => {
-          this.lastActivityAt = Date.now();
-          this.sendHello();
-        };
-
-        ws.onmessage = (event) => {
-          this.lastActivityAt = Date.now();
-          if (typeof event.data === "string") {
-            try {
-              const raw = JSON.parse(event.data);
-              this.handleRawInboundMessage(raw, (info) => {
-                if (!helloResolved) {
-                  helloResolved = true;
-                  clearTimeout(onConnectTimeout);
-                  this.reconnectAttempts = 0;
-                  this.setState("connected");
-                  this.startHeartbeat();
-                  resolve(info);
-                }
-              });
-            } catch (err) {
-              console.error("[PaseoClient] Failed to parse message:", event.data, err);
-            }
-          } else if (event.data instanceof ArrayBuffer) {
-            this.handleBinaryMessage(event.data);
-          }
-        };
-
-        ws.onerror = (err) => {
-          console.warn("[PaseoClient] WebSocket error:", err);
-          if (!helloResolved) {
-            clearTimeout(onConnectTimeout);
-            this.setState("error");
-            reject(new Error("WebSocket connection failed"));
-          }
-        };
-
-        ws.onclose = (ev) => {
-          console.log(`[PaseoClient] WebSocket closed (${ev.code}: ${ev.reason})`);
-          this.stopHeartbeat();
-          if (this.state !== "disconnected") {
-            this.scheduleReconnect();
-          }
-        };
-      } catch (err) {
-        this.setState("error");
-        reject(err);
-      }
-    });
+  public async connect(forceFresh = false): Promise<ServerInfoPayload> {
+    if (!this.cleanupBrowserListeners) {
+      this.setupBrowserLifecycleListeners();
+    }
+    const daemonState = this.daemon.getConnectionState().status;
+    if (forceFresh || daemonState === "disposed" || daemonState === "disconnected") {
+      this.recreateDaemon();
+    }
+    await this.daemon.connect();
+    const info = this.daemon.getLastServerInfoMessage();
+    if (info) {
+      this.emit("server_info", info);
+      return info;
+    }
+    return {} as ServerInfoPayload;
   }
 
   public disconnect() {
-    this.setState("disconnected");
-    this.cleanup();
-  }
-
-  private cleanup() {
-    this.stopHeartbeat();
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      this.ws.onopen = null;
-      try {
-        this.ws.close();
-      } catch {}
-      this.ws = null;
-    }
-    for (const [_, req] of this.pendingRequests.entries()) {
-      clearTimeout(req.timer);
-      req.reject(new Error("Connection closed"));
-    }
-    this.pendingRequests.clear();
-  }
-
-  private setState(state: ConnectionState) {
-    if (this.state !== state) {
-      this.state = state;
-      this.emit("state_change", state);
-    }
-  }
-
-  private sendHello() {
-    const hello: WSHelloMessage = {
-      type: "hello",
-      clientId: this.clientId,
-      clientType: "browser",
-      protocolVersion: 1,
-      capabilities: {
-        [CLIENT_CAPS.customModeIcons]: true,
-        [CLIENT_CAPS.reasoningMergeEnum]: true,
-        [CLIENT_CAPS.terminalReflowableSnapshot]: true,
-        [CLIENT_CAPS.providerSubagents]: true,
-        [CLIENT_CAPS.projectUpdates]: true,
-        [CLIENT_CAPS.compactProviderSnapshots]: true,
-        [CLIENT_CAPS.timelineReplacementInvalidation]: true,
-        [CLIENT_CAPS.selectiveAgentTimeline]: true,
-      },
-    };
-    this.sendJson(hello);
-  }
-
-  private sendPing() {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.sendJson({ type: "ping" });
-    }
-  }
-
-  private startHeartbeat() {
-    this.stopHeartbeat();
-    this.lastActivityAt = Date.now();
-
-    // 1. Send application ping every 4s to claim/renew socket lease
-    this.pingTimer = setInterval(() => {
-      this.sendPing();
-    }, this.pingIntervalMs);
-
-    // 2. Check liveness: if no traffic/pong seen in 15s, proactively recycle connection
-    this.livenessTimer = setInterval(() => {
-      if (this.state === "connected") {
-        const elapsed = Date.now() - this.lastActivityAt;
-        if (elapsed > this.livenessTimeoutMs) {
-          console.warn(`[PaseoClient] Liveness failure (${Math.round(elapsed / 1000)}s without traffic), reconnecting...`);
-          if (this.ws) {
-            try {
-              this.ws.close();
-            } catch {}
-          }
-        }
-      }
-    }, 5000);
-  }
-
-  private stopHeartbeat() {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
-    if (this.livenessTimer) {
-      clearInterval(this.livenessTimer);
-      this.livenessTimer = null;
-    }
-  }
-
-  private scheduleReconnect(explicitDelayMs?: number) {
-    this.setState("reconnecting");
-    this.reconnectAttempts++;
-    const delay =
-      explicitDelayMs !== undefined
-        ? explicitDelayMs
-        : Math.min(1000 * Math.pow(1.4, this.reconnectAttempts - 1), this.maxReconnectDelay);
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect().catch((err) => {
-        console.warn("[PaseoClient] Reconnect attempt failed:", err);
-      });
-    }, delay);
-  }
-
-  private sendJson(msg: object) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
-    }
+    this.cleanupBrowserListeners?.();
+    this.cleanupBrowserListeners = null;
+    this.cleanupDaemonSubscriptions();
+    this.state = "disconnected";
+    this.emit("state_change", "disconnected");
+    try {
+      void this.daemon.close();
+    } catch {}
   }
 
   public sendBinary(data: Uint8Array | ArrayBuffer) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      if (data instanceof Uint8Array) {
-        this.ws.send(data.buffer as ArrayBuffer);
-      } else {
-        this.ws.send(data);
-      }
-    }
-  }
-
-  private handleRawInboundMessage(raw: any, onServerInfo?: (info: ServerInfoPayload) => void) {
-    if (!raw) return;
-
-    if (raw.type === "pong") {
-      this.lastActivityAt = Date.now();
-      return;
-    }
-
-    // Unwrap session frames
-    const msg = raw.type === "session" && raw.message ? raw.message : raw;
-
-    // Check for server_info status frame
-    if (msg.type === "status" && msg.payload?.status === "server_info") {
-      this.emit("server_info", msg.payload);
-      if (onServerInfo) {
-        onServerInfo(msg.payload);
-      }
-      return;
-    }
-
-    // Correlate RPC responses
-    const reqId = msg.requestId || msg.payload?.requestId;
-    if (reqId && this.pendingRequests.has(reqId)) {
-      const pending = this.pendingRequests.get(reqId)!;
-      this.pendingRequests.delete(reqId);
-      clearTimeout(pending.timer);
-
-      if (msg.type === "rpc_error" || msg.error || (msg.payload && msg.payload.error)) {
-        pending.reject(new Error(msg.payload?.error || msg.error || "RPC error"));
-      } else {
-        pending.resolve(msg.payload !== undefined ? msg.payload : msg);
-      }
-      return;
-    }
-
-    // Event routing
-    this.emit(msg.type, msg.payload || msg);
-    if (msg.type === "agent_stream") {
-      this.emit("agent_stream", msg.payload || msg);
-    } else if (msg.type === "agent_update") {
-      this.emit("agent_update", msg.payload || msg);
-    } else if (msg.type === "workspace_update") {
-      this.emit("workspace_update", msg.payload || msg);
-    } else if (msg.type === "providers_snapshot_update") {
-      this.emit("providers_snapshot_update", msg.payload || msg);
-    }
-  }
-
-  private handleBinaryMessage(buffer: ArrayBuffer) {
-    this.lastActivityAt = Date.now();
-    const frame = decodeTerminalFrame(buffer);
-    if (!frame) return;
-
-    if (frame.opcode === TerminalOpcode.Output || frame.opcode === TerminalOpcode.Snapshot) {
-      const text = decodeTerminalPayloadAsString(frame.payload);
-      const listeners = this.terminalListeners.get(frame.slot);
-      if (listeners) {
-        listeners.forEach((fn) => fn(text));
-      }
-      this.emit("terminal_data", { slot: frame.slot, data: text });
-    }
-  }
-
-  // Session RPC Request
-  public async request<T = any>(type: string, payload: Record<string, any> = {}): Promise<T> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error("Client is not connected to Paseo daemon");
-    }
-
-    const requestId = `req-${Math.random().toString(36).substring(2, 9)}-${Date.now()}`;
-    const innerMessage = {
-      type,
-      requestId,
-      ...payload,
-    };
-
-    const envelope = {
-      type: "session",
-      message: innerMessage,
-    };
-
-    return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.pendingRequests.delete(requestId);
-          reject(new Error(`Request ${type} (${requestId}) timed out`));
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const frame = decodeTerminalStreamFrame(bytes);
+    if (frame) {
+      const terminalId = this.slotTerminals.get(frame.slot);
+      if (terminalId) {
+        if (frame.opcode === TerminalStreamOpcode.Input) {
+          const text = textDecoder.decode(frame.payload);
+          this.daemon.sendTerminalInput(terminalId, { type: "input", data: text });
+          return;
+        } else if (frame.opcode === TerminalStreamOpcode.Resize) {
+          try {
+            const decoded = decodeTerminalResizePayload(frame.payload);
+            if (decoded) {
+              this.daemon.sendTerminalInput(terminalId, {
+                type: "resize",
+                cols: decoded.cols,
+                rows: decoded.rows,
+                intent: decoded.intent,
+              });
+              return;
+            }
+          } catch {}
         }
-      }, this.requestTimeoutMs);
+      }
+    }
 
-      this.pendingRequests.set(requestId, { resolve, reject, timer });
-      this.sendJson(envelope);
-    });
+    if (this.activeWs && typeof this.activeWs.send === "function" && this.activeWs.readyState === 1) {
+      this.activeWs.send(bytes.buffer as ArrayBuffer);
+    }
   }
 
   // Event Subscriptions
@@ -473,21 +356,28 @@ export class PaseoClient {
 
   // API Methods
   public async fetchWorkspaces(): Promise<any> {
-    return this.request("fetch_workspaces_request", {});
+    return this.daemon.fetchWorkspaces();
   }
 
   public async fetchAgents(workspaceId?: string): Promise<any> {
-    return this.request("fetch_agents_request", {
-      filter: workspaceId ? { workspaceId } : undefined,
-    });
+    const res = await this.daemon.fetchAgents();
+    if (workspaceId && res && Array.isArray(res.entries)) {
+      const filtered = res.entries.filter((e) => {
+        const ag = e.agent || e;
+        return !ag.workspaceId || ag.workspaceId === workspaceId;
+      });
+      return { ...res, entries: filtered };
+    }
+    return res;
   }
 
   public async openProject(cwd: string): Promise<{ workspace: WorkspaceItem }> {
-    return this.request("open_project_request", { cwd });
+    const res = await this.daemon.openProject(cwd);
+    return res as any;
   }
 
   public async fetchAgentTimeline(agentId: string): Promise<{ entries: any[] }> {
-    return this.request("fetch_agent_timeline_request", { agentId });
+    return this.daemon.fetchAgentTimeline(agentId);
   }
 
   public async createAgent(params: {
@@ -499,7 +389,9 @@ export class PaseoClient {
     thinkingEffort?: string;
     initialPrompt?: string;
   }): Promise<{ agent: AgentSnapshot }> {
-    return this.request("create_agent_request", {
+    const agent = await this.daemon.createAgent({
+      workspaceId: params.workspaceId,
+      cwd: params.cwd,
       config: {
         provider: params.provider || "opencode",
         cwd: params.cwd,
@@ -507,11 +399,9 @@ export class PaseoClient {
         modeId: params.mode || undefined,
         thinkingOptionId: params.thinkingEffort === "off" ? undefined : params.thinkingEffort,
       },
-      workspaceId: params.workspaceId,
       initialPrompt: params.initialPrompt,
-      attachments: [],
-      labels: {},
     });
+    return { agent: agent as any };
   }
 
   public async sendAgentMessage(params: {
@@ -520,68 +410,151 @@ export class PaseoClient {
     attachments?: string[];
   }): Promise<{ accepted: boolean }> {
     await this.setAgentTimelineSubscription([params.agentId]).catch(() => {});
-    return this.request("send_agent_message_request", {
-      agentId: params.agentId,
-      text: params.text,
-      attachments: params.attachments || [],
+    await this.daemon.sendAgentMessage(params.agentId, params.text, {
+      attachments: params.attachments as any,
     });
+    return { accepted: true };
   }
 
   public async cancelAgent(agentId: string): Promise<void> {
-    return this.request("cancel_agent_request", { agentId });
+    return this.daemon.cancelAgent(agentId);
   }
 
   public async setAgentModel(
     agentId: string,
     modelId: string | null,
   ): Promise<{ accepted: boolean; error?: string | null }> {
-    return this.request("set_agent_model_request", { agentId, modelId });
+    await this.daemon.setAgentModel(agentId, modelId);
+    return { accepted: true };
   }
 
   public async setAgentThinking(
     agentId: string,
     thinkingOptionId: string | null,
   ): Promise<{ accepted: boolean; error?: string | null }> {
-    return this.request("set_agent_thinking_request", { agentId, thinkingOptionId });
+    await this.daemon.setAgentThinkingOption(agentId, thinkingOptionId);
+    return { accepted: true };
   }
 
   public async setAgentMode(
     agentId: string,
     modeId: string,
   ): Promise<{ accepted: boolean; error?: string | null }> {
-    return this.request("set_agent_mode_request", { agentId, modeId });
+    const notice = await this.daemon.setAgentMode(agentId, modeId);
+    return { accepted: true, error: notice?.message };
+  }
+
+  public async respondToPermission(
+    agentId: string,
+    requestId: string,
+    response: AgentPermissionResponse,
+  ): Promise<void> {
+    return this.daemon.respondToPermission(agentId, requestId, response);
   }
 
   public async setAgentTimelineSubscription(agentIds: string[]): Promise<void> {
-    return this.request("agent.timeline.set_subscription.request", {
-      agentIds: [...new Set(agentIds)].sort(),
-    });
+    return this.daemon.setAgentTimelineSubscription(agentIds);
   }
 
   public async getProvidersSnapshot(): Promise<any> {
-    return this.request("get_providers_snapshot_request", {});
+    return this.daemon.getProvidersSnapshot();
   }
 
   public async listTerminals(workspaceId?: string): Promise<{ terminals: TerminalSessionInfo[] }> {
-    return this.request("list_terminals_request", { workspaceId });
+    const res = await this.daemon.listTerminals(
+      undefined,
+      undefined,
+      workspaceId ? { workspaceId } : undefined,
+    );
+    const list: TerminalSessionInfo[] = [];
+    if (res && Array.isArray(res.terminals)) {
+      for (const t of res.terminals) {
+        let slot = this.terminalSlots.get(t.id);
+        if (slot === undefined) {
+          try {
+            const sub = await this.daemon.subscribeTerminal(t.id);
+            if (sub.error === null) {
+              slot = sub.slot;
+              this.terminalSlots.set(t.id, slot);
+              this.slotTerminals.set(slot, t.id);
+            }
+          } catch (e) {
+            console.warn(`[PaseoClient] Failed to subscribe to terminal ${t.id}:`, e);
+          }
+        }
+        list.push({
+          id: t.id,
+          slot: slot ?? 0,
+          title: t.title || t.name,
+          rows: 24,
+          cols: 80,
+          cwd: res.cwd,
+        });
+      }
+    }
+    return { terminals: list };
   }
 
   public async createTerminal(params: {
     workspaceId?: string;
     cols?: number;
     rows?: number;
+    cwd?: string;
   }): Promise<{ terminalId: string; slot: number }> {
-    return this.request("create_terminal_request", params);
+    const res = await this.daemon.createTerminal(params.cwd || "", undefined, undefined, {
+      workspaceId: params.workspaceId,
+      size: params.cols && params.rows ? { cols: params.cols, rows: params.rows } : undefined,
+    });
+    if (!res.terminal) {
+      throw new Error(res.error || "Failed to create terminal");
+    }
+    const terminalId = res.terminal.id;
+    const sub = await this.daemon.subscribeTerminal(terminalId);
+    if (sub.error !== null) {
+      throw new Error(sub.error || "Failed to subscribe to terminal");
+    }
+    const slot = sub.slot;
+    this.terminalSlots.set(terminalId, slot);
+    this.slotTerminals.set(slot, terminalId);
+    return { terminalId, slot };
   }
 
-  public async getGitStatus(workspaceId: string): Promise<GitStatusSummary> {
-    return this.request("checkout_status_request", { workspaceId });
+  public async getGitStatus(workspaceIdOrCwd: string): Promise<GitStatusSummary> {
+    try {
+      const res = await this.daemon.getCheckoutStatus(workspaceIdOrCwd);
+      const isDirty = (res as any).isDirty ?? false;
+      const aheadBehind = (res as any).aheadBehind;
+      return {
+        branch: (res as any).currentBranch || "main",
+        upstream: (res as any).upstreamRef || undefined,
+        ahead: aheadBehind?.ahead ?? (res as any).aheadOfOrigin ?? 0,
+        behind: aheadBehind?.behind ?? (res as any).behindOfOrigin ?? 0,
+        isClean: !isDirty,
+        stagedFiles: (res as any).stagedFiles || [],
+        unstagedFiles: (res as any).unstagedFiles || [],
+        untrackedFiles: (res as any).untrackedFiles || [],
+      };
+    } catch {
+      return {
+        branch: "main",
+        ahead: 0,
+        behind: 0,
+        isClean: true,
+        stagedFiles: [],
+        unstagedFiles: [],
+        untrackedFiles: [],
+      };
+    }
   }
 
   public async commitGitChanges(params: {
     workspaceId: string;
     message: string;
   }): Promise<{ commitSha: string }> {
-    return this.request("checkout_commit_request", params);
+    const res = await this.daemon.checkoutCommit(params.workspaceId, {
+      message: params.message,
+      addAll: true,
+    });
+    return res as any;
   }
 }

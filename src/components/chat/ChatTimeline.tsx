@@ -5,6 +5,7 @@ import { AssistantMessage } from "./AssistantMessage";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { ToolCallItem } from "./ToolCallItem";
 import { TodoBlock } from "./TodoBlock";
+import { PendingPermissionCard } from "./PendingPermissionCard";
 import {
   Sparkles,
   ArrowDown,
@@ -24,7 +25,14 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     activeAgent,
     activeWorkspace,
     activeAgentId,
+    pendingPermissions,
+    respondToPermission,
   } = useWorkspace();
+
+  const agentPendingPermissions = useMemo(() => {
+    if (!activeAgentId) return [];
+    return pendingPermissions.filter((p) => p.agentId === activeAgentId);
+  }, [pendingPermissions, activeAgentId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -76,7 +84,12 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 160;
 
-    if (isNearBottom || isTurnRunning || timeline.length > prevTimelineLengthRef.current) {
+    if (
+      isNearBottom ||
+      isTurnRunning ||
+      timeline.length > prevTimelineLengthRef.current ||
+      agentPendingPermissions.length > 0
+    ) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: "smooth",
@@ -84,7 +97,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     }
 
     prevTimelineLengthRef.current = timeline.length;
-  }, [timeline, activeAgentId, isTurnRunning]);
+  }, [timeline, activeAgentId, isTurnRunning, agentPendingPermissions.length]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -209,8 +222,19 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
           })
         )}
 
+        {/* Pending Permission Requests / Question Prompts */}
+        {agentPendingPermissions.map((permission) => (
+          <PendingPermissionCard
+            key={permission.key}
+            permission={permission}
+            onRespond={(response) =>
+              respondToPermission(permission.agentId, permission.request.id, response)
+            }
+          />
+        ))}
+
         {/* Turn Running Indicator at bottom of timeline */}
-        {isTurnRunning && (
+        {isTurnRunning && agentPendingPermissions.length === 0 && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-1 animate-pulse">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
             <span>Paseo is thinking and working...</span>

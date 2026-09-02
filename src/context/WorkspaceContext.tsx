@@ -13,6 +13,9 @@ import type {
   ReasoningTimelineItem,
   ToolCallTimelineItem,
   TodoTimelineItem,
+  PendingPermission,
+  AgentPermissionResponse,
+  AgentPermissionRequest,
 } from "../lib/paseo/types";
 
 interface WorkspaceContextType {
@@ -31,6 +34,13 @@ interface WorkspaceContextType {
   timeline: TimelineItem[];
   isTimelineLoading: boolean;
   refreshTimeline: (agentId?: string) => Promise<void>;
+
+  pendingPermissions: PendingPermission[];
+  respondToPermission: (
+    agentId: string,
+    requestId: string,
+    response: AgentPermissionResponse,
+  ) => Promise<void>;
 
   models: AgentModel[];
   selectedModel: string;
@@ -113,6 +123,20 @@ export function resolveCanonicalModelId(
   return modelId;
 }
 
+export function derivePendingPermissionKey(
+  agentId: string,
+  request: AgentPermissionRequest,
+): string {
+  const fallbackId =
+    request.id ||
+    (typeof request.metadata?.id === "string" ? request.metadata.id : undefined) ||
+    request.name ||
+    request.title ||
+    `${request.kind}:${JSON.stringify(request.input ?? request.metadata ?? {})}`;
+
+  return `${agentId}:${fallbackId}`;
+}
+
 function normalizeMode(mode: any): AgentMode {
   return {
     id: mode.id,
@@ -157,6 +181,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [thinkingEffort, setThinkingEffortState] = useState<string>("medium");
 
   const [isTurnRunning, setIsTurnRunning] = useState<boolean>(false);
+
+  const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
@@ -255,6 +281,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       setAgents(list);
+
+      // Collect pendingPermissions across active agent records
+      setPendingPermissions((prev) => {
+        const next = [...prev];
+        for (const agent of list) {
+          if (Array.isArray(agent.pendingPermissions)) {
+            for (const req of agent.pendingPermissions) {
+              const key = derivePendingPermissionKey(agent.id, req);
+              if (!next.some((p) => p.key === key)) {
+                next.push({ key, agentId: agent.id, request: req });
+              }
+            }
+          }
+        }
+        return next;
+      });
+
       if (list.length > 0 && !activeAgentId) {
         setActiveAgentIdState(list[0]!.id);
       }
@@ -352,16 +395,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Refresh Git status
   const refreshGitStatus = useCallback(async () => {
-    if (!activeWorkspaceId || client.getState() !== "connected") return;
+    const cwd = activeWorkspace?.path;
+    if (!cwd || client.getState() !== "connected") return;
     try {
-      const res = await client.getGitStatus(activeWorkspaceId);
+      const res = await client.getGitStatus(cwd);
       if (res) {
         setGitStatus(res);
       }
     } catch (err) {
       console.warn("[WorkspaceProvider] getGitStatus error:", err);
     }
-  }, [client, activeWorkspaceId]);
+  }, [client, activeWorkspace]);
 
   // Refresh terminals
   const refreshTerminals = useCallback(async () => {
@@ -462,6 +506,36 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       if (event.type === "turn_started") {
         setIsTurnRunning(true);
+      } else if (event.type === "permission_requested") {
+        const req = event.request || (event as any).payload?.request;
+        const targetAgentId = streamAgentId || activeAgentId;
+        if (targetAgentId && req) {
+          setPendingPermissions((prev) => {
+            const key = derivePendingPermissionKey(targetAgentId, req);
+            const existingIdx = prev.findIndex((p) => p.key === key);
+            const item: PendingPermission = { key, agentId: targetAgentId, request: req };
+            if (existingIdx >= 0) {
+              const next = [...prev];
+              next[existingIdx] = item;
+              return next;
+            }
+            return [...prev, item];
+          });
+        }
+      } else if (event.type === "permission_resolved") {
+        const reqId = event.requestId || (event as any).payload?.requestId;
+        const targetAgentId = streamAgentId || activeAgentId;
+        if (reqId) {
+          setPendingPermissions((prev) =>
+            prev.filter(
+              (p) =>
+                !(
+                  (!targetAgentId || p.agentId === targetAgentId) &&
+                  (p.request.id === reqId || p.key === `${targetAgentId}:${reqId}` || p.key.endsWith(`:${reqId}`))
+                ),
+            ),
+          );
+        }
       } else if (event.type === "mode_changed" && streamAgentId) {
         setAgents((previousAgents) =>
           previousAgents.map((agent) =>
@@ -619,6 +693,40 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    const unsubPermissionRequest = client.on("agent_permission_request", (payload: any) => {
+      const agentId = payload?.agentId || payload?.payload?.agentId;
+      const request: AgentPermissionRequest = payload?.request || payload?.payload?.request;
+      if (!agentId || !request) return;
+
+      setPendingPermissions((prev) => {
+        const key = derivePendingPermissionKey(agentId, request);
+        const existingIdx = prev.findIndex((p) => p.key === key);
+        const item: PendingPermission = { key, agentId, request };
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = item;
+          return next;
+        }
+        return [...prev, item];
+      });
+    });
+
+    const unsubPermissionResolved = client.on("agent_permission_resolved", (payload: any) => {
+      const agentId = payload?.agentId || payload?.payload?.agentId;
+      const requestId = payload?.requestId || payload?.payload?.requestId;
+      if (!agentId || !requestId) return;
+
+      setPendingPermissions((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              p.agentId === agentId &&
+              (p.request.id === requestId || p.key === `${agentId}:${requestId}` || p.key.endsWith(`:${requestId}`))
+            ),
+        ),
+      );
+    });
+
     const unsubAgentUpdate = client.on("agent_update", (payload: any) => {
       const agent = normalizeAgentSnapshot(payload.agent || payload);
       if (agent && agent.id) {
@@ -634,6 +742,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (agent.id === activeAgentId) {
           setIsTurnRunning(agent.status === "running");
         }
+
+        if (Array.isArray(agent.pendingPermissions)) {
+          setPendingPermissions((prev) => {
+            const activeKeys = new Set(
+              agent.pendingPermissions!.map((r: any) => derivePendingPermissionKey(agent.id, r)),
+            );
+            const filtered = prev.filter((p) => p.agentId !== agent.id || activeKeys.has(p.key));
+            for (const req of agent.pendingPermissions!) {
+              const key = derivePendingPermissionKey(agent.id, req);
+              if (!filtered.some((p) => p.key === key)) {
+                filtered.push({ key, agentId: agent.id, request: req });
+              }
+            }
+            return filtered;
+          });
+        }
       }
     });
 
@@ -643,6 +767,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       unsubStream();
+      unsubPermissionRequest();
+      unsubPermissionResolved();
       unsubAgentUpdate();
       unsubWorkspaceUpdate();
     };
@@ -726,6 +852,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         });
     },
     [activeAgentId, client, refreshAgents, thinkingEffort],
+  );
+
+  const respondToPermission = useCallback(
+    async (
+      agentId: string,
+      requestId: string,
+      response: AgentPermissionResponse,
+    ) => {
+      await client.respondToPermission(agentId, requestId, response);
+      setPendingPermissions((prev) =>
+        prev.filter(
+          (p) =>
+            !(
+              p.agentId === agentId &&
+              (p.request.id === requestId ||
+                p.key === `${agentId}:${requestId}` ||
+                p.key.endsWith(`:${requestId}`))
+            ),
+        ),
+      );
+      setTimeout(() => {
+        refreshAgents();
+        refreshTimeline(agentId);
+      }, 300);
+    },
+    [client, refreshAgents, refreshTimeline],
   );
 
   const sendMessage = async (text: string, attachments?: string[]) => {
@@ -902,6 +1054,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         timeline,
         isTimelineLoading,
         refreshTimeline,
+
+        pendingPermissions,
+        respondToPermission,
 
         models,
         selectedModel,
