@@ -81,6 +81,12 @@ export interface WSInboundMessage {
 
 
 // Workspaces & Projects
+export interface ProjectItem {
+  id: string;
+  name: string;
+  rootPath: string;
+}
+
 export interface WorkspaceItem {
   id: string;
   name: string;
@@ -90,6 +96,10 @@ export interface WorkspaceItem {
   activeAgentId?: string;
   lastActiveAt?: string;
   worktrees?: WorktreeItem[];
+  projectId?: string;
+  workspaceKind?: "local_checkout" | "worktree";
+  worktreeSlug?: string;
+  branch?: string;
 }
 
 export interface WorktreeItem {
@@ -135,6 +145,7 @@ export interface AgentSnapshot {
   id: string;
   provider?: string;
   workspaceId?: string;
+  cwd?: string;
   name?: string;
   title?: string;
   status: "idle" | "running" | "paused" | "completed" | "failed" | "canceled";
@@ -151,6 +162,16 @@ export interface AgentSnapshot {
   attentionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  project?: {
+    projectKey?: string;
+    projectName?: string;
+    checkout?: {
+      cwd?: string;
+      currentBranch?: string;
+      isPaseoOwnedWorktree?: boolean;
+      mainRepoRoot?: string | null;
+    };
+  };
   activeTurnId?: string;
   turnsCount?: number;
   tokenUsage?: {

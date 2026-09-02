@@ -355,6 +355,22 @@ export class PaseoClient {
   }
 
   // API Methods
+  public async listProjects(): Promise<any> {
+    return this.daemon.listProjects();
+  }
+
+  public async getProjectIcon(
+    projectId: string,
+  ): Promise<{ icon: { mimeType: string; data: string } | null }> {
+    return this.daemon.getProjectIcon(projectId) as any;
+  }
+
+  public async requestProjectIcon(
+    cwd: string,
+  ): Promise<{ icon: { mimeType: string; data: string } | null }> {
+    return this.daemon.requestProjectIcon(cwd) as any;
+  }
+
   public async fetchWorkspaces(): Promise<any> {
     return this.daemon.fetchWorkspaces();
   }

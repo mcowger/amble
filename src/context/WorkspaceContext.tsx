@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { usePaseo } from "./PaseoContext";
 import type {
+  ProjectItem,
   WorkspaceItem,
   AgentSnapshot,
   TimelineItem,
@@ -19,12 +20,14 @@ import type {
 } from "../lib/paseo/types";
 
 interface WorkspaceContextType {
+  projects: ProjectItem[];
   workspaces: WorkspaceItem[];
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceItem | null;
   setActiveWorkspaceId: (id: string | null) => void;
   refreshWorkspaces: () => Promise<void>;
 
+  allAgents: AgentSnapshot[];
   agents: AgentSnapshot[];
   activeAgentId: string | null;
   activeAgent: AgentSnapshot | null;
@@ -56,7 +59,7 @@ interface WorkspaceContextType {
 
   isTurnRunning: boolean;
   sendMessage: (text: string, attachments?: string[]) => Promise<void>;
-  createSession: (initialPrompt?: string) => Promise<AgentSnapshot | null>;
+  createSession: (initialPrompt?: string, targetWorkspaceId?: string) => Promise<AgentSnapshot | null>;
   cancelTurn: () => Promise<void>;
 
   // Drawer
@@ -147,7 +150,9 @@ function normalizeMode(mode: any): AgentMode {
   };
 }
 
-function normalizeAgentSnapshot(agent: any): AgentSnapshot {
+function normalizeAgentSnapshot(entryOrAgent: any): AgentSnapshot {
+  const agent = entryOrAgent.agent || entryOrAgent;
+  const project = entryOrAgent.project || agent.project;
   const availableModes = Array.isArray(agent.availableModes)
     ? agent.availableModes.map(normalizeMode)
     : agent.availableModes;
@@ -156,6 +161,7 @@ function normalizeAgentSnapshot(agent: any): AgentSnapshot {
 
   return {
     ...agent,
+    project,
     currentModeId,
     availableModes,
   };
@@ -165,8 +171,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { client, connectionState } = usePaseo();
 
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(null);
 
+  const [allAgents, setAllAgents] = useState<AgentSnapshot[]>([]);
   const [agents, setAgents] = useState<AgentSnapshot[]>([]);
   const [activeAgentId, setActiveAgentIdState] = useState<string | null>(null);
 
@@ -195,6 +203,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
   const activeAgent = agents.find((a) => a.id === activeAgentId) || null;
+
   const selectedModelDefinition =
     models.find((model) => model.id === selectedModel) ||
     models.find((model) => model.id === resolveCanonicalModelId(selectedModel, models));
@@ -224,29 +233,74 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const refreshWorkspaces = useCallback(async () => {
     if (client.getState() !== "connected") return;
     try {
-      const res = await client.fetchWorkspaces();
+      const [res, prjRes] = await Promise.all([
+        client.fetchWorkspaces().catch(() => null),
+        client.listProjects().catch(() => null),
+      ]);
       const list: WorkspaceItem[] = [];
+      const projectMap = new Map<string, ProjectItem>();
+
+      for (const p of prjRes?.projects || []) {
+        const root = p.projectRootPath || p.projectId;
+        if (root) {
+          projectMap.set(root, {
+            id: p.projectId,
+            name: p.projectDisplayName || p.projectCustomName || p.projectId,
+            rootPath: p.projectRootPath,
+          });
+        }
+      }
 
       if (res && Array.isArray(res.entries)) {
         for (const entry of res.entries) {
+          const root =
+            entry.projectRootPath ||
+            entry.project?.checkout?.mainRepoRoot ||
+            (entry.workspaceKind === "local_checkout" ? entry.workspaceDirectory : null);
+          if (root && !projectMap.has(root)) {
+            projectMap.set(root, {
+              id: entry.projectId || root,
+              name: entry.projectDisplayName || entry.name,
+              rootPath: root,
+            });
+          }
+
           list.push({
             id: entry.id,
             name: entry.title || entry.name || entry.projectDisplayName || entry.id,
             path: entry.workspaceDirectory || entry.projectRootPath || "",
             isFavorite: !!entry.pinnedAt,
+            projectId: entry.projectId,
+            workspaceKind: entry.workspaceKind,
+            worktreeSlug:
+              entry.worktreeSlug ||
+              entry.gitRuntime?.currentBranch ||
+              entry.project?.checkout?.currentBranch,
+            branch: entry.gitRuntime?.currentBranch || entry.project?.checkout?.currentBranch,
           });
         }
       }
 
       if (res && Array.isArray(res.emptyProjects)) {
         for (const p of res.emptyProjects) {
+          const root = p.projectRootPath || p.projectId;
+          if (root && !projectMap.has(root)) {
+            projectMap.set(root, {
+              id: p.projectId,
+              name: p.projectDisplayName || p.projectCustomName || p.projectId,
+              rootPath: p.projectRootPath,
+            });
+          }
           list.push({
             id: p.projectId,
             name: p.projectDisplayName || p.projectCustomName || p.projectId,
             path: p.projectRootPath || "",
+            projectId: p.projectId,
           });
         }
       }
+
+      setProjects(Array.from(projectMap.values()));
 
       if (list.length > 0) {
         setWorkspaces(list);
@@ -265,22 +319,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const refreshAgents = useCallback(async () => {
     if (client.getState() !== "connected") return;
     try {
-      const res = await client.fetchAgents(activeWorkspaceId || undefined);
+      const res = await client.fetchAgents();
       const list: AgentSnapshot[] = [];
 
       if (res && Array.isArray(res.entries)) {
         for (const entry of res.entries) {
-          if (entry.agent) {
-            list.push(normalizeAgentSnapshot(entry.agent));
-          } else if (entry.id) {
-            list.push(normalizeAgentSnapshot(entry));
-          }
+          list.push(normalizeAgentSnapshot(entry));
         }
       } else if (res && Array.isArray(res.agents)) {
         list.push(...res.agents.map(normalizeAgentSnapshot));
       }
 
-      setAgents(list);
+      setAllAgents(list);
+
+      const filtered = activeWorkspaceId
+        ? list.filter((a) => a.workspaceId === activeWorkspaceId)
+        : list;
+      setAgents(filtered);
 
       // Collect pendingPermissions across active agent records
       setPendingPermissions((prev) => {
@@ -774,11 +829,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     };
   }, [client, activeAgentId, refreshAgents, refreshWorkspaces]);
 
-  const setActiveWorkspaceId = (id: string | null) => {
+  const setActiveWorkspaceId = useCallback((id: string | null) => {
     setActiveWorkspaceIdState(id);
-    setActiveAgentIdState(null);
-    setTimeline([]);
-  };
+    if (id) {
+      setAgents(allAgents.filter((a) => a.workspaceId === id));
+    } else {
+      setAgents(allAgents);
+    }
+  }, [allAgents]);
 
   const setActiveAgentId = (id: string | null) => {
     setActiveAgentIdState(id);
@@ -928,12 +986,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const createSession = async (initialPrompt?: string): Promise<AgentSnapshot | null> => {
+  const createSession = async (
+    initialPrompt?: string,
+    targetWorkspaceId?: string,
+  ): Promise<AgentSnapshot | null> => {
     try {
-      let resolvedWorkspaceId = activeWorkspaceId;
-      let cwd = activeWorkspace?.path || "/home/matt.cowger/workspace/tmp";
+      let resolvedWorkspaceId = targetWorkspaceId || activeWorkspaceId;
+      const targetWs = workspaces.find((w) => w.id === resolvedWorkspaceId);
+      const cwd = targetWs?.path || activeWorkspace?.path || "/home/matt.cowger/workspace/tmp";
 
-      if (resolvedWorkspaceId && resolvedWorkspaceId.startsWith("prj_")) {
+      if (
+        resolvedWorkspaceId &&
+        (resolvedWorkspaceId.startsWith("prj_") || resolvedWorkspaceId.startsWith("remote:"))
+      ) {
         const opened = await client.openProject(cwd);
         if (opened && opened.workspace) {
           resolvedWorkspaceId = opened.workspace.id;
@@ -966,8 +1031,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       if (res && res.agent) {
         const agent = normalizeAgentSnapshot(res.agent);
-        setAgents((prev) => [agent, ...prev]);
+        setAllAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
+        setAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
         setActiveAgentIdState(agent.id);
+        setActiveWorkspaceIdState(resolvedWorkspaceId);
         if (initialPrompt) {
           setIsTurnRunning(true);
         }
@@ -1039,12 +1106,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   return (
     <WorkspaceContext.Provider
       value={{
+        projects,
         workspaces,
         activeWorkspaceId,
         activeWorkspace,
         setActiveWorkspaceId,
         refreshWorkspaces,
 
+        allAgents,
         agents,
         activeAgentId,
         activeAgent,
