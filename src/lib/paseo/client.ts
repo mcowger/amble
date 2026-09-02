@@ -3,7 +3,6 @@ import {
   type ConnectionState,
   type WSHelloMessage,
   type ServerInfoPayload,
-  type WSInboundMessage,
   type WorkspaceItem,
   type AgentSnapshot,
   type TimelineItem,
@@ -31,11 +30,14 @@ export class PaseoClient {
   private clientId: string;
   private state: ConnectionState = "disconnected";
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private livenessTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
-  private readonly maxReconnectDelay = 15000;
+  private lastActivityAt: number = Date.now();
+  private readonly maxReconnectDelay = 10000;
   private readonly pingIntervalMs: number;
   private readonly requestTimeoutMs: number;
+  private readonly livenessTimeoutMs = 15000;
 
   private pendingRequests = new Map<
     string,
@@ -48,28 +50,79 @@ export class PaseoClient {
 
   private eventListeners = new Map<string, Set<EventHandler>>();
   private terminalListeners = new Map<number, Set<(data: string) => void>>();
+  private cleanupBrowserListeners: (() => void) | null = null;
 
   constructor(config: PaseoClientConfig = {}) {
     this.url = config.url || this.getDefaultUrl();
     this.token = config.token;
-    this.clientId = config.clientId || this.generateClientId();
-    this.pingIntervalMs = config.pingIntervalMs || 10000;
+    this.clientId = config.clientId || this.getOrCreateClientId();
+    this.pingIntervalMs = config.pingIntervalMs || 4000;
     this.requestTimeoutMs = config.requestTimeoutMs || 30000;
+
+    this.setupBrowserLifecycleListeners();
   }
 
   private getDefaultUrl(): string {
     if (typeof window !== "undefined") {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      if (window.location.port === "5173" || window.location.port === "3000") {
-        return `${proto}//${window.location.hostname}:6767/ws`;
-      }
-      return `${proto}//${window.location.host}/ws`;
+      const host = window.location.hostname || "127.0.0.1";
+      return `${proto}//${host}:6767/ws`;
     }
     return "ws://127.0.0.1:6767/ws";
   }
 
-  private generateClientId(): string {
+  private getOrCreateClientId(): string {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("amble-client-id");
+      if (saved) return saved;
+      const generated = `amble-${Math.random().toString(36).substring(2, 9)}-${Date.now().toString(36)}`;
+      try {
+        localStorage.setItem("amble-client-id", generated);
+      } catch {}
+      return generated;
+    }
     return `amble-${Math.random().toString(36).substring(2, 9)}-${Date.now().toString(36)}`;
+  }
+
+  private setupBrowserLifecycleListeners() {
+    if (typeof window === "undefined") return;
+
+    const onVisibleOrOnline = () => {
+      if (document.visibilityState === "visible" || navigator.onLine) {
+        this.checkConnectionLiveness();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibleOrOnline);
+    window.addEventListener("focus", onVisibleOrOnline);
+    window.addEventListener("online", onVisibleOrOnline);
+    window.addEventListener("pageshow", onVisibleOrOnline);
+
+    this.cleanupBrowserListeners = () => {
+      document.removeEventListener("visibilitychange", onVisibleOrOnline);
+      window.removeEventListener("focus", onVisibleOrOnline);
+      window.removeEventListener("online", onVisibleOrOnline);
+      window.removeEventListener("pageshow", onVisibleOrOnline);
+    };
+  }
+
+  public checkConnectionLiveness() {
+    if (this.state === "disconnected") return;
+
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.log("[PaseoClient] Socket is not open on visibility restore, reconnecting...");
+      this.reconnectAttempts = 0;
+      this.scheduleReconnect(100);
+      return;
+    }
+
+    const elapsed = Date.now() - this.lastActivityAt;
+    if (elapsed > this.livenessTimeoutMs) {
+      console.log(`[PaseoClient] No socket activity for ${Math.round(elapsed / 1000)}s, recycling connection...`);
+      this.ws.close();
+    } else {
+      this.sendPing();
+    }
   }
 
   public getState(): ConnectionState {
@@ -94,6 +147,7 @@ export class PaseoClient {
         const ws = new WebSocket(this.url, protocols);
         ws.binaryType = "arraybuffer";
         this.ws = ws;
+        this.lastActivityAt = Date.now();
 
         let helloResolved = false;
 
@@ -106,10 +160,12 @@ export class PaseoClient {
         }, 12000);
 
         ws.onopen = () => {
+          this.lastActivityAt = Date.now();
           this.sendHello();
         };
 
         ws.onmessage = (event) => {
+          this.lastActivityAt = Date.now();
           if (typeof event.data === "string") {
             try {
               const raw = JSON.parse(event.data);
@@ -170,7 +226,9 @@ export class PaseoClient {
       this.ws.onerror = null;
       this.ws.onmessage = null;
       this.ws.onopen = null;
-      this.ws.close();
+      try {
+        this.ws.close();
+      } catch {}
       this.ws = null;
     }
     for (const [_, req] of this.pendingRequests.entries()) {
@@ -207,13 +265,35 @@ export class PaseoClient {
     this.sendJson(hello);
   }
 
+  private sendPing() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendJson({ type: "ping" });
+    }
+  }
+
   private startHeartbeat() {
     this.stopHeartbeat();
+    this.lastActivityAt = Date.now();
+
+    // 1. Send application ping every 4s to claim/renew socket lease
     this.pingTimer = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.sendJson({ type: "ping" });
-      }
+      this.sendPing();
     }, this.pingIntervalMs);
+
+    // 2. Check liveness: if no traffic/pong seen in 15s, proactively recycle connection
+    this.livenessTimer = setInterval(() => {
+      if (this.state === "connected") {
+        const elapsed = Date.now() - this.lastActivityAt;
+        if (elapsed > this.livenessTimeoutMs) {
+          console.warn(`[PaseoClient] Liveness failure (${Math.round(elapsed / 1000)}s without traffic), reconnecting...`);
+          if (this.ws) {
+            try {
+              this.ws.close();
+            } catch {}
+          }
+        }
+      }
+    }, 5000);
   }
 
   private stopHeartbeat() {
@@ -221,13 +301,26 @@ export class PaseoClient {
       clearInterval(this.pingTimer);
       this.pingTimer = null;
     }
+    if (this.livenessTimer) {
+      clearInterval(this.livenessTimer);
+      this.livenessTimer = null;
+    }
   }
 
-  private scheduleReconnect() {
+  private scheduleReconnect(explicitDelayMs?: number) {
     this.setState("reconnecting");
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.maxReconnectDelay);
+    const delay =
+      explicitDelayMs !== undefined
+        ? explicitDelayMs
+        : Math.min(1000 * Math.pow(1.4, this.reconnectAttempts - 1), this.maxReconnectDelay);
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.connect().catch((err) => {
         console.warn("[PaseoClient] Reconnect attempt failed:", err);
       });
@@ -254,6 +347,7 @@ export class PaseoClient {
     if (!raw) return;
 
     if (raw.type === "pong") {
+      this.lastActivityAt = Date.now();
       return;
     }
 
@@ -292,10 +386,13 @@ export class PaseoClient {
       this.emit("agent_update", msg.payload || msg);
     } else if (msg.type === "workspace_update") {
       this.emit("workspace_update", msg.payload || msg);
+    } else if (msg.type === "providers_snapshot_update") {
+      this.emit("providers_snapshot_update", msg.payload || msg);
     }
   }
 
   private handleBinaryMessage(buffer: ArrayBuffer) {
+    this.lastActivityAt = Date.now();
     const frame = decodeTerminalFrame(buffer);
     if (!frame) return;
 
