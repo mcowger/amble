@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Brain, ChevronDown, ChevronRight, Sparkles, Loader2 } from "lucide-react";
 import { formatDuration } from "../../lib/utils";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ThinkingTraceProps {
   text: string;
@@ -74,9 +75,18 @@ export function ThinkingTrace({
       {isExpanded && (
         <div
           ref={contentRef}
-          className="p-3 border-t border-border/40 bg-background/50 font-mono text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-80 overflow-y-auto"
+          className="p-3 border-t border-border/40 bg-background/50 text-xs text-muted-foreground leading-relaxed max-h-80 overflow-y-auto"
         >
-          {text || (isStreaming ? "Thinking..." : "No reasoning details available.")}
+          {text ? (
+            <MarkdownRenderer content={text} variant="thought" />
+          ) : isStreaming ? (
+            <div className="flex items-center gap-2 text-muted-foreground italic">
+              <Loader2 className="w-3 h-3 animate-spin text-amber-500" />
+              <span>Thinking...</span>
+            </div>
+          ) : (
+            <span className="italic text-muted-foreground">No reasoning details available.</span>
+          )}
         </div>
       )}
     </div>

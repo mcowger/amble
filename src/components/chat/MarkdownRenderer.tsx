@@ -23,9 +23,10 @@ import "prismjs/components/prism-go";
 interface CodeBlockProps {
   code: string;
   language?: string;
+  compact?: boolean;
 }
 
-export function CodeBlock({ code, language }: CodeBlockProps) {
+export function CodeBlock({ code, language, compact }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -47,9 +48,19 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   }, [code, language]);
 
   return (
-    <div className="my-3 rounded-lg border border-border bg-muted/30 overflow-hidden font-mono text-xs">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/60 border-b border-border/50 text-[11px] text-muted-foreground select-none">
-        <span className="font-mono text-[11px] uppercase tracking-wider font-semibold">
+    <div
+      className={clsx(
+        "rounded-lg border border-border bg-muted/30 overflow-hidden font-mono",
+        compact ? "my-2 text-[11px]" : "my-3 text-xs",
+      )}
+    >
+      <div
+        className={clsx(
+          "flex items-center justify-between bg-muted/60 border-b border-border/50 text-muted-foreground select-none",
+          compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[11px]",
+        )}
+      >
+        <span className="font-mono uppercase tracking-wider font-semibold">
           {language || "code"}
         </span>
         <button
@@ -60,17 +71,22 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
           {copied ? (
             <>
               <Check className="w-3 h-3 text-emerald-500" />
-              <span className="text-emerald-500 text-[11px]">Copied</span>
+              <span className="text-emerald-500 text-[10px]">Copied</span>
             </>
           ) : (
             <>
               <Copy className="w-3 h-3" />
-              <span className="text-[11px]">Copy</span>
+              <span className="text-[10px]">Copy</span>
             </>
           )}
         </button>
       </div>
-      <pre className="p-3.5 overflow-x-auto text-foreground font-mono text-xs leading-relaxed">
+      <pre
+        className={clsx(
+          "overflow-x-auto text-foreground font-mono leading-relaxed",
+          compact ? "p-2.5 text-[11px]" : "p-3.5 text-xs",
+        )}
+      >
         {highlightedHtml ? (
           <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
         ) : (
@@ -117,20 +133,44 @@ function normalizeMarkdown(content: string): string {
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  variant?: "default" | "thought";
 }
 
-export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export function MarkdownRenderer({
+  content,
+  className,
+  variant = "default",
+}: MarkdownRendererProps) {
   const normalized = useMemo(() => normalizeMarkdown(content), [content]);
+  const isThought = variant === "thought";
 
   return (
-    <div className={clsx("text-sm leading-relaxed text-foreground", className)}>
+    <div
+      className={clsx(
+        isThought
+          ? "text-xs leading-relaxed text-muted-foreground"
+          : "text-sm leading-relaxed text-foreground",
+        className,
+      )}
+    >
       <Markdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={{
           table({ children, ...props }) {
             return (
-              <div className="my-3 w-full overflow-x-auto rounded-lg border border-border bg-card/40 shadow-2xs">
-                <table className="w-full min-w-full divide-y divide-border text-left text-xs border-collapse" {...props}>
+              <div
+                className={clsx(
+                  "w-full overflow-x-auto rounded-lg border border-border bg-card/40 shadow-2xs",
+                  isThought ? "my-2" : "my-3",
+                )}
+              >
+                <table
+                  className={clsx(
+                    "w-full min-w-full divide-y divide-border text-left border-collapse",
+                    isThought ? "text-[11px]" : "text-xs",
+                  )}
+                  {...props}
+                >
                   {children}
                 </table>
               </div>
@@ -138,7 +178,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           thead({ children, ...props }) {
             return (
-              <thead className="bg-muted/70 text-muted-foreground border-b border-border text-[11px] font-semibold uppercase tracking-wider select-none" {...props}>
+              <thead
+                className="bg-muted/70 text-muted-foreground border-b border-border text-[11px] font-semibold uppercase tracking-wider select-none"
+                {...props}
+              >
                 {children}
               </thead>
             );
@@ -161,7 +204,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             return (
               <th
                 style={style}
-                className="px-3.5 py-2 font-medium text-muted-foreground whitespace-nowrap"
+                className={clsx(
+                  "font-medium text-muted-foreground whitespace-nowrap",
+                  isThought ? "px-2.5 py-1.5 text-[10px]" : "px-3.5 py-2",
+                )}
                 {...props}
               >
                 {children}
@@ -172,7 +218,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             return (
               <td
                 style={style}
-                className="px-3.5 py-2.5 text-foreground leading-relaxed align-top"
+                className={clsx(
+                  "text-foreground leading-relaxed align-top",
+                  isThought ? "px-2.5 py-1.5 text-[11px]" : "px-3.5 py-2.5",
+                )}
                 {...props}
               >
                 {children}
@@ -182,7 +231,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           pre({ children, ...props }) {
             const codeChild =
               React.isValidElement(children) &&
-              (children.type === "code" || (typeof children.props === "object" && children.props !== null && "children" in children.props))
+              (children.type === "code" ||
+                (typeof children.props === "object" &&
+                  children.props !== null &&
+                  "children" in children.props))
                 ? children
                 : null;
 
@@ -191,12 +243,15 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
               const codeClassName = codeProps?.className || "";
               const language = codeClassName.replace(/^language-/, "").trim();
               const codeText = String(codeProps?.children || "").replace(/\n$/, "");
-              return <CodeBlock code={codeText} language={language} />;
+              return <CodeBlock code={codeText} language={language} compact={isThought} />;
             }
 
             return (
               <pre
-                className="my-3 p-3.5 rounded-lg border border-border bg-muted/40 font-mono text-xs overflow-x-auto leading-relaxed text-foreground"
+                className={clsx(
+                  "rounded-lg border border-border bg-muted/40 font-mono overflow-x-auto leading-relaxed text-foreground",
+                  isThought ? "my-2 p-2.5 text-[11px]" : "my-3 p-3.5 text-xs",
+                )}
                 {...props}
               >
                 {children}
@@ -207,11 +262,16 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             if (codeClassName?.startsWith("language-")) {
               const language = codeClassName.replace(/^language-/, "").trim();
               const codeText = String(children || "").replace(/\n$/, "");
-              return <CodeBlock code={codeText} language={language} />;
+              return <CodeBlock code={codeText} language={language} compact={isThought} />;
             }
             return (
               <code
-                className="px-1.5 py-0.5 rounded-md bg-muted font-mono text-[12px] text-foreground font-medium border border-border/40"
+                className={clsx(
+                  "font-mono font-medium border",
+                  isThought
+                    ? "px-1.5 py-0.5 rounded bg-muted/60 text-[11px] text-foreground border-border/30"
+                    : "px-1.5 py-0.5 rounded-md bg-muted text-[12px] text-foreground border-border/40",
+                )}
                 {...props}
               >
                 {children}
@@ -220,49 +280,105 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           h1({ children, ...props }) {
             return (
-              <h1 className="text-xl font-bold text-foreground mt-5 mb-2 first:mt-0 leading-tight" {...props}>
+              <h1
+                className={clsx(
+                  isThought
+                    ? "text-sm font-bold text-foreground mt-3 mb-1"
+                    : "text-xl font-bold text-foreground mt-5 mb-2",
+                  "first:mt-0 leading-tight",
+                )}
+                {...props}
+              >
                 {children}
               </h1>
             );
           },
           h2({ children, ...props }) {
             return (
-              <h2 className="text-lg font-semibold text-foreground mt-4 mb-2 first:mt-0 leading-snug" {...props}>
+              <h2
+                className={clsx(
+                  isThought
+                    ? "text-xs font-semibold text-foreground mt-2.5 mb-1"
+                    : "text-lg font-semibold text-foreground mt-4 mb-2",
+                  "first:mt-0 leading-snug",
+                )}
+                {...props}
+              >
                 {children}
               </h2>
             );
           },
           h3({ children, ...props }) {
             return (
-              <h3 className="text-base font-semibold text-foreground mt-3 mb-1.5 first:mt-0 leading-normal" {...props}>
+              <h3
+                className={clsx(
+                  isThought
+                    ? "text-xs font-semibold text-foreground mt-2 mb-1"
+                    : "text-base font-semibold text-foreground mt-3 mb-1.5",
+                  "first:mt-0 leading-normal",
+                )}
+                {...props}
+              >
                 {children}
               </h3>
             );
           },
           h4({ children, ...props }) {
             return (
-              <h4 className="text-sm font-semibold text-foreground mt-2.5 mb-1 first:mt-0" {...props}>
+              <h4
+                className={clsx(
+                  isThought
+                    ? "text-xs font-medium text-foreground mt-1.5 mb-0.5"
+                    : "text-sm font-semibold text-foreground mt-2.5 mb-1",
+                  "first:mt-0",
+                )}
+                {...props}
+              >
                 {children}
               </h4>
             );
           },
           h5({ children, ...props }) {
             return (
-              <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-2 mb-1 first:mt-0" {...props}>
+              <h5
+                className={clsx(
+                  isThought
+                    ? "text-[10px] text-muted-foreground/80 mt-1 mb-0.5"
+                    : "text-xs text-muted-foreground mt-2 mb-1",
+                  "font-semibold uppercase tracking-wider first:mt-0",
+                )}
+                {...props}
+              >
                 {children}
               </h5>
             );
           },
           h6({ children, ...props }) {
             return (
-              <h6 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-2 mb-1 first:mt-0" {...props}>
+              <h6
+                className={clsx(
+                  isThought
+                    ? "text-[10px] text-muted-foreground/80 mt-1 mb-0.5"
+                    : "text-xs text-muted-foreground mt-2 mb-1",
+                  "font-semibold uppercase tracking-wider first:mt-0",
+                )}
+                {...props}
+              >
                 {children}
               </h6>
             );
           },
           p({ children, ...props }) {
             return (
-              <p className="my-2 leading-relaxed text-foreground first:mt-0 last:mb-0" {...props}>
+              <p
+                className={clsx(
+                  isThought
+                    ? "my-1.5 leading-relaxed text-muted-foreground"
+                    : "my-2 leading-relaxed text-foreground",
+                  "first:mt-0 last:mb-0",
+                )}
+                {...props}
+              >
                 {children}
               </p>
             );
@@ -272,8 +388,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             return (
               <ul
                 className={clsx(
-                  "my-2 space-y-1 text-sm text-foreground",
-                  isTaskList ? "list-none pl-1" : "list-disc pl-5 marker:text-muted-foreground"
+                  isThought
+                    ? "my-1.5 space-y-0.5 text-xs text-muted-foreground"
+                    : "my-2 space-y-1 text-sm text-foreground",
+                  isTaskList ? "list-none pl-1" : "list-disc pl-5 marker:text-muted-foreground",
                 )}
                 {...props}
               >
@@ -283,7 +401,15 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           ol({ children, ...props }) {
             return (
-              <ol className="list-decimal pl-5 my-2 space-y-1 text-sm text-foreground marker:text-muted-foreground" {...props}>
+              <ol
+                className={clsx(
+                  isThought
+                    ? "my-1.5 space-y-0.5 text-xs text-muted-foreground"
+                    : "my-2 space-y-1 text-sm text-foreground",
+                  "list-decimal pl-5 marker:text-muted-foreground",
+                )}
+                {...props}
+              >
                 {children}
               </ol>
             );
@@ -294,7 +420,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
               <li
                 className={clsx(
                   "leading-relaxed",
-                  isTaskList && "flex items-start gap-2 list-none"
+                  isTaskList && "flex items-start gap-2 list-none",
                 )}
                 {...props}
               >
@@ -320,7 +446,12 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           blockquote({ children, ...props }) {
             return (
               <blockquote
-                className="my-3 pl-3.5 border-l-2 border-primary/40 text-muted-foreground italic text-sm space-y-1"
+                className={clsx(
+                  isThought
+                    ? "my-2 pl-3 text-xs space-y-0.5 text-muted-foreground/90"
+                    : "my-3 pl-3.5 text-sm space-y-1 text-muted-foreground",
+                  "border-l-2 border-primary/40 italic",
+                )}
                 {...props}
               >
                 {children}
@@ -328,7 +459,14 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             );
           },
           hr({ ...props }) {
-            return <hr className="my-4 border-t border-border" {...props} />;
+            return (
+              <hr
+                className={clsx(
+                  isThought ? "my-2 border-t border-border/40" : "my-4 border-t border-border",
+                )}
+                {...props}
+              />
+            );
           },
           a({ href, children, ...props }) {
             return (
@@ -361,7 +499,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           em({ children, ...props }) {
             return (
-              <em className="italic text-foreground" {...props}>
+              <em
+                className={clsx("italic", isThought ? "text-muted-foreground/90" : "text-foreground")}
+                {...props}
+              >
                 {children}
               </em>
             );
