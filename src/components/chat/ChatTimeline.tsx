@@ -42,6 +42,8 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
   // Track user manual expansion overrides per reasoning item index
   const [userReasoningOverrides, setUserReasoningOverrides] = useState<Record<number, boolean>>({});
   const prevLatestReasoningIdxRef = useRef<number>(-1);
+  const isSwitchingSessionRef = useRef(false);
+  const switchSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Find the index of the latest reasoning item in the timeline
   const latestReasoningIndex = useMemo(() => {
@@ -61,10 +63,12 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     }
   }, [latestReasoningIndex]);
 
-  // Reset overrides when switching active agent / session
+  // Reset overrides and trigger session switch pinning when switching active agent / session
   useEffect(() => {
     setUserReasoningOverrides({});
     prevLatestReasoningIdxRef.current = -1;
+    isSwitchingSessionRef.current = true;
+    initialScrollDoneRef.current = null;
   }, [activeAgentId]);
 
   // Instant scroll to bottom on initial load / session switch (no animation)
@@ -72,9 +76,42 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     if (!scrollRef.current || timeline.length === 0) return;
 
     const currentAgentKey = activeAgentId || "default";
+    const isNewSession = initialScrollDoneRef.current !== currentAgentKey;
 
-    if (initialScrollDoneRef.current !== currentAgentKey) {
+    if (isNewSession) {
       initialScrollDoneRef.current = currentAgentKey;
+      isSwitchingSessionRef.current = true;
+      if (switchSettleTimeoutRef.current) {
+        clearTimeout(switchSettleTimeoutRef.current);
+      }
+
+      // Immediately pin to bottom before paint
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      prevTimelineLengthRef.current = timeline.length;
+
+      // Keep pinned to bottom on consecutive animation frames as markdown & syntax highlighters expand
+      const frame1 = requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+        const frame2 = requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        });
+      });
+
+      switchSettleTimeoutRef.current = setTimeout(() => {
+        isSwitchingSessionRef.current = false;
+      }, 250);
+
+      return () => {
+        cancelAnimationFrame(frame1);
+      };
+    }
+
+    // If still in the session switch settlement window, keep pinned instantly without animation
+    if (isSwitchingSessionRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       prevTimelineLengthRef.current = timeline.length;
       return;
@@ -129,7 +166,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto"
       >
-        {isTimelineLoading ? (
+        {isTimelineLoading && timeline.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
             <span className="text-xs">Loading session history...</span>

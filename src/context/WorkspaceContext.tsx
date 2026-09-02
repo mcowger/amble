@@ -232,8 +232,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const canChangeMode =
     modes.length > 1 && (!activeAgent || activeAgent.capabilities?.supportsDynamicModes === true);
 
+  // In-memory cache for loaded agent timelines to eliminate switching flicker
+  const timelineCacheRef = useRef<Map<string, TimelineItem[]>>(new Map());
+
   // Track in-flight timeline requests to avoid race conditions
   const activeTimelineFetchRef = useRef<string | null>(null);
+
+  // Sync current timeline into cache whenever it updates
+  useEffect(() => {
+    if (activeAgentId && timeline.length > 0) {
+      timelineCacheRef.current.set(activeAgentId, timeline);
+    }
+  }, [activeAgentId, timeline]);
 
   // Refresh workspaces
   const refreshWorkspaces = useCallback(async () => {
@@ -382,8 +392,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       activeTimelineFetchRef.current = id;
-      setIsTimelineLoading(true);
-      setTimeline([]);
+
+      // Show cached timeline immediately if available (0ms delay, zero flicker)
+      const cached = timelineCacheRef.current.get(id);
+      if (cached && cached.length > 0) {
+        setTimeline(cached);
+        setIsTimelineLoading(false);
+      } else {
+        setIsTimelineLoading(true);
+        setTimeline([]);
+      }
+
       try {
         const res = await client.fetchAgentTimeline(id);
         if (activeTimelineFetchRef.current !== id) return;
@@ -396,8 +415,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               items.push(e);
             }
           }
+          timelineCacheRef.current.set(id, items);
           setTimeline(items);
         } else {
+          timelineCacheRef.current.set(id, []);
           setTimeline([]);
         }
       } catch (err) {
