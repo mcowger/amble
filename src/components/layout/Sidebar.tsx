@@ -268,42 +268,34 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
         {projectTree.map(({ project, directWorkspace, directSessions, worktrees }) => {
           const hasChildren =
             directSessions.length > 0 || worktrees.length > 0;
-          const isProjectCollapsed = hasChildren && collapsedProjects.has(project.id);
+          const isProjectCollapsed = collapsedProjects.has(project.id);
 
           return (
             <div key={project.id || project.name} className="space-y-0.5">
               {/* Project Header */}
               <div
                 onClick={() => {
-                  if (hasChildren) {
-                    toggleProjectCollapse(project.id);
-                  }
+                  toggleProjectCollapse(project.id);
                   handleSelectProject(project, directWorkspace);
                 }}
-                className={`group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground transition-colors ${
-                  hasChildren ? "cursor-pointer" : "cursor-default"
-                }`}
+                className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground cursor-pointer transition-colors"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  {hasChildren ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleProjectCollapse(project.id);
-                      }}
-                      className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
-                      title={isProjectCollapsed ? "Expand project" : "Collapse project"}
-                    >
-                      <ChevronRight
-                        className={`w-3 h-3 transition-transform duration-150 ${
-                          !isProjectCollapsed ? "rotate-90" : ""
-                        }`}
-                      />
-                    </button>
-                  ) : (
-                    <span className="w-4 shrink-0" />
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleProjectCollapse(project.id);
+                    }}
+                    className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
+                    title={isProjectCollapsed ? "Expand project" : "Collapse project"}
+                  >
+                    <ChevronRight
+                      className={`w-3 h-3 transition-transform duration-150 ${
+                        !isProjectCollapsed ? "rotate-90" : ""
+                      }`}
+                    />
+                  </button>
 
                   <ProjectIcon project={project} client={client} />
                   <span className="font-semibold text-xs tracking-tight lowercase truncate">
