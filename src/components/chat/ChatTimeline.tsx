@@ -129,7 +129,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4 max-w-4xl w-full mx-auto"
       >
-        {isTimelineLoading && timeline.length === 0 ? (
+        {isTimelineLoading ? (
           <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
             <span className="text-xs">Loading session history...</span>

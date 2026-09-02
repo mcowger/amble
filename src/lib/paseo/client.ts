@@ -375,8 +375,13 @@ export class PaseoClient {
     return this.daemon.fetchWorkspaces();
   }
 
-  public async fetchAgents(workspaceId?: string): Promise<any> {
-    const res = await this.daemon.fetchAgents();
+  public async fetchAgents(
+    options?: { workspaceId?: string; scope?: "active" | "all" } | string,
+  ): Promise<any> {
+    const opts = typeof options === "string" ? { workspaceId: options } : options;
+    const scope = opts?.scope ?? "active";
+    const res = await this.daemon.fetchAgents(scope === "all" ? undefined : { scope: "active" });
+    const workspaceId = opts?.workspaceId;
     if (workspaceId && res && Array.isArray(res.entries)) {
       const filtered = res.entries.filter((e) => {
         const ag = e.agent || e;

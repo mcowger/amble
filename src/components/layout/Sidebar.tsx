@@ -153,92 +153,37 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
       }
     }
 
-    // 3. Ensure any agents with cwd not in pMap are captured
-    for (const a of allAgents) {
-      const mainRoot = a.project?.checkout?.mainRepoRoot;
-      const prjKey = a.project?.projectKey;
-      const key = prjKey || mainRoot;
-      if (key && !pMap.has(key)) {
-        const parts = (mainRoot || a.cwd || "").split("/");
-        const name = a.project?.projectName || parts[parts.length - 1] || "project";
-        pMap.set(key, {
-          id: key,
-          name,
-          rootPath: mainRoot || a.cwd || "",
-        });
-      }
-    }
-
     return Array.from(pMap.values()).map((p) => {
-      const pPath = p.rootPath;
-      const pId = p.id;
-
-      // Find all agents belonging to this project
-      const projectAgents = allAgents.filter((a) => {
-        const mainRoot = a.project?.checkout?.mainRepoRoot;
-        const prjKey = a.project?.projectKey;
-        if (mainRoot && pPath && mainRoot === pPath) return true;
-        if (prjKey && (prjKey === pId || prjKey.toLowerCase() === p.name.toLowerCase())) return true;
-        if (pPath && (a.cwd === pPath || a.cwd?.startsWith(pPath + "/"))) {
-          if (a.cwd?.includes("-worktrees/") && !pPath.includes("-worktrees/")) return false;
-          return true;
-        }
-        return false;
-      });
-
-      // Split into direct and worktree sessions
-      const directSessions = projectAgents.filter((a) => {
-        const mainRoot = a.project?.checkout?.mainRepoRoot;
-        if (mainRoot && a.cwd && a.cwd !== mainRoot) return false;
-        if (a.cwd?.includes("-worktrees/")) return false;
-        return true;
-      });
-
-      const worktreeAgents = projectAgents.filter((a) => !directSessions.includes(a));
-
-      // Group worktree sessions by branch / worktree name
-      const worktreeMap = new Map<
-        string,
-        { branch: string; workspaceId?: string; sessions: AgentSnapshot[] }
-      >();
-
-      // Match registered worktree workspaces
-      const projectWorktreeWorkspaces = workspaces.filter(
+      // Find registered workspaces belonging to this project
+      const projectWorkspaces = workspaces.filter(
         (w) =>
-          w.workspaceKind === "worktree" &&
-          (w.projectId === p.id || (pPath && (w.path.startsWith(pPath) || w.path.includes(p.name)))),
+          w.projectId === p.id ||
+          (p.projectKey && w.projectId === p.projectKey) ||
+          (p.rootPath && w.path === p.rootPath),
       );
 
-      for (const wt of projectWorktreeWorkspaces) {
-        const branch = wt.worktreeSlug || wt.branch || wt.name;
-        if (!worktreeMap.has(branch)) {
-          worktreeMap.set(branch, { branch, workspaceId: wt.id, sessions: [] });
-        }
-      }
+      const directWorkspace = projectWorkspaces.find(
+        (w) => w.workspaceKind === "local_checkout" || w.workspaceKind === "directory",
+      );
+      const worktreeWorkspaces = projectWorkspaces.filter(
+        (w) => w.workspaceKind === "worktree",
+      );
 
-      for (const a of worktreeAgents) {
-        const branch =
-          a.project?.checkout?.currentBranch ||
-          (a.cwd ? a.cwd.split("/").pop() : undefined) ||
-          "worktree";
-        if (!worktreeMap.has(branch)) {
-          worktreeMap.set(branch, { branch, workspaceId: a.workspaceId, sessions: [] });
-        }
-        worktreeMap.get(branch)!.sessions.push(a);
-      }
+      const directSessions = directWorkspace
+        ? allAgents.filter((a) => a.workspaceId === directWorkspace.id)
+        : [];
 
-      const directWorkspace =
-        workspaces.find(
-          (w) =>
-            w.workspaceKind === "local_checkout" &&
-            (w.projectId === p.id || w.path === p.rootPath),
-        ) || workspaces.find((w) => w.path === p.rootPath);
+      const worktrees = worktreeWorkspaces.map((wt) => ({
+        branch: wt.branch || wt.worktreeSlug || wt.name,
+        workspaceId: wt.id,
+        sessions: allAgents.filter((a) => a.workspaceId === wt.id),
+      }));
 
       return {
         project: p,
         directWorkspace,
         directSessions,
-        worktrees: Array.from(worktreeMap.values()),
+        worktrees,
       };
     });
   }, [projects, workspaces, allAgents]);
@@ -390,7 +335,10 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                       <div key={session.id} className="pl-6 pr-1">
                         <div
                           onClick={() =>
-                            handleSelectSession(session.id, directWorkspace?.id || project.id)
+                            handleSelectSession(
+                              session.id,
+                              session.workspaceId || directWorkspace?.id || project.id,
+                            )
                           }
                           className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded-md text-xs cursor-pointer transition-all ${
                             isActive
@@ -486,7 +434,10 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                               <div key={session.id} className="pl-9 pr-1">
                                 <div
                                   onClick={() =>
-                                    handleSelectSession(session.id, wt.workspaceId || project.id)
+                                    handleSelectSession(
+                                      session.id,
+                                      session.workspaceId || wt.workspaceId || project.id,
+                                    )
                                   }
                                   className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded-md text-xs cursor-pointer transition-all ${
                                     isActive

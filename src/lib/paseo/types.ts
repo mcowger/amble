@@ -83,8 +83,10 @@ export interface WSInboundMessage {
 // Workspaces & Projects
 export interface ProjectItem {
   id: string;
+  projectKey?: string;
   name: string;
   rootPath: string;
+  projectKind?: string;
 }
 
 export interface WorkspaceItem {
@@ -97,7 +99,8 @@ export interface WorkspaceItem {
   lastActiveAt?: string;
   worktrees?: WorktreeItem[];
   projectId?: string;
-  workspaceKind?: "local_checkout" | "worktree";
+  projectKey?: string;
+  workspaceKind?: "local_checkout" | "worktree" | "directory";
   worktreeSlug?: string;
   branch?: string;
 }

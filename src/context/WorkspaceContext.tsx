@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { usePaseo } from "./PaseoContext";
 import type {
   ProjectItem,
@@ -202,7 +202,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [activeTerminalSlot, setActiveTerminalSlot] = useState<number | null>(null);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || null;
-  const activeAgent = agents.find((a) => a.id === activeAgentId) || null;
+  const activeAgent =
+    allAgents.find((a) => a.id === activeAgentId) ||
+    agents.find((a) => a.id === activeAgentId) ||
+    null;
 
   const selectedModelDefinition =
     models.find((model) => model.id === selectedModel) ||
@@ -229,6 +232,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const canChangeMode =
     modes.length > 1 && (!activeAgent || activeAgent.capabilities?.supportsDynamicModes === true);
 
+  // Track in-flight timeline requests to avoid race conditions
+  const activeTimelineFetchRef = useRef<string | null>(null);
+
   // Refresh workspaces
   const refreshWorkspaces = useCallback(async () => {
     if (client.getState() !== "connected") return;
@@ -241,27 +247,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const projectMap = new Map<string, ProjectItem>();
 
       for (const p of prjRes?.projects || []) {
-        const root = p.projectRootPath || p.projectId;
-        if (root) {
-          projectMap.set(root, {
-            id: p.projectId,
-            name: p.projectDisplayName || p.projectCustomName || p.projectId,
-            rootPath: p.projectRootPath,
+        const id = p.projectId || p.id;
+        if (id) {
+          projectMap.set(id, {
+            id,
+            projectKey: p.projectKey,
+            name: p.projectDisplayName || p.projectCustomName || p.name || id,
+            rootPath: p.projectRootPath || "",
+            projectKind: p.projectKind,
           });
         }
       }
 
       if (res && Array.isArray(res.entries)) {
         for (const entry of res.entries) {
-          const root =
-            entry.projectRootPath ||
-            entry.project?.checkout?.mainRepoRoot ||
-            (entry.workspaceKind === "local_checkout" ? entry.workspaceDirectory : null);
-          if (root && !projectMap.has(root)) {
-            projectMap.set(root, {
-              id: entry.projectId || root,
-              name: entry.projectDisplayName || entry.name,
-              rootPath: root,
+          const prjId = entry.projectId;
+          if (prjId && !projectMap.has(prjId)) {
+            projectMap.set(prjId, {
+              id: prjId,
+              projectKey: entry.projectKey,
+              name: entry.projectDisplayName || entry.name || prjId,
+              rootPath: entry.projectRootPath || entry.workspaceDirectory || "",
+              projectKind: entry.projectKind,
             });
           }
 
@@ -271,32 +278,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             path: entry.workspaceDirectory || entry.projectRootPath || "",
             isFavorite: !!entry.pinnedAt,
             projectId: entry.projectId,
+            projectKey: entry.projectKey,
             workspaceKind: entry.workspaceKind,
             worktreeSlug:
               entry.worktreeSlug ||
               entry.gitRuntime?.currentBranch ||
               entry.project?.checkout?.currentBranch,
-            branch: entry.gitRuntime?.currentBranch || entry.project?.checkout?.currentBranch,
+            branch:
+              entry.gitRuntime?.currentBranch ||
+              entry.project?.checkout?.currentBranch ||
+              entry.worktreeSlug,
           });
         }
       }
 
       if (res && Array.isArray(res.emptyProjects)) {
         for (const p of res.emptyProjects) {
-          const root = p.projectRootPath || p.projectId;
-          if (root && !projectMap.has(root)) {
-            projectMap.set(root, {
-              id: p.projectId,
-              name: p.projectDisplayName || p.projectCustomName || p.projectId,
-              rootPath: p.projectRootPath,
+          const id = p.projectId || p.id;
+          if (id && !projectMap.has(id)) {
+            projectMap.set(id, {
+              id,
+              projectKey: p.projectKey,
+              name: p.projectDisplayName || p.projectCustomName || p.name || id,
+              rootPath: p.projectRootPath || "",
+              projectKind: p.projectKind,
             });
           }
-          list.push({
-            id: p.projectId,
-            name: p.projectDisplayName || p.projectCustomName || p.projectId,
-            path: p.projectRootPath || "",
-            projectId: p.projectId,
-          });
         }
       }
 
@@ -305,7 +312,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (list.length > 0) {
         setWorkspaces(list);
         if (!activeWorkspaceId) {
-          const tmp = list.find((w) => w.name.toLowerCase() === "tmp" || w.path.endsWith("/tmp") || w.id.includes("tmp"));
+          const tmp = list.find(
+            (w) =>
+              w.name.toLowerCase() === "tmp" ||
+              w.path.endsWith("/tmp") ||
+              w.id.includes("tmp"),
+          );
           const chosen = tmp ? tmp.id : list[0]!.id;
           setActiveWorkspaceIdState(chosen);
         }
@@ -319,7 +331,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const refreshAgents = useCallback(async () => {
     if (client.getState() !== "connected") return;
     try {
-      const res = await client.fetchAgents();
+      const res = await client.fetchAgents({ scope: "active" });
       const list: AgentSnapshot[] = [];
 
       if (res && Array.isArray(res.entries)) {
@@ -353,7 +365,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
 
-      if (list.length > 0 && !activeAgentId) {
+      if (list.length > 0 && (!activeAgentId || !list.some((a) => a.id === activeAgentId))) {
         setActiveAgentIdState(list[0]!.id);
       }
     } catch (err) {
@@ -365,10 +377,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const refreshTimeline = useCallback(
     async (targetAgentId?: string) => {
       const id = targetAgentId || activeAgentId;
-      if (!id || client.getState() !== "connected") return;
+      if (!id || client.getState() !== "connected") {
+        setTimeline([]);
+        return;
+      }
+      activeTimelineFetchRef.current = id;
       setIsTimelineLoading(true);
+      setTimeline([]);
       try {
         const res = await client.fetchAgentTimeline(id);
+        if (activeTimelineFetchRef.current !== id) return;
         if (res && Array.isArray(res.entries)) {
           const items: TimelineItem[] = [];
           for (const e of res.entries) {
@@ -383,9 +401,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           setTimeline([]);
         }
       } catch (err) {
+        if (activeTimelineFetchRef.current !== id) return;
         console.warn("[WorkspaceProvider] fetchAgentTimeline error:", err);
+        setTimeline([
+          {
+            type: "error",
+            message: `Could not load session: ${err instanceof Error ? err.message : String(err)}`,
+          } as TimelineItem,
+        ]);
       } finally {
-        setIsTimelineLoading(false);
+        if (activeTimelineFetchRef.current === id) {
+          setIsTimelineLoading(false);
+        }
       }
     },
     [client, activeAgentId],
