@@ -20,6 +20,8 @@ import type {
   AgentPermissionRequest,
   ImageAttachment,
   AgentSlashCommand,
+  CreateWorktreeParams,
+  CreateWorktreeResult,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
@@ -55,6 +57,13 @@ interface WorkspaceContextType {
   activeWorkspace: WorkspaceItem | null;
   setActiveWorkspaceId: (id: string | null) => void;
   refreshWorkspaces: () => Promise<void>;
+  createWorktree: (params: {
+    projectId: string;
+    cwd?: string;
+    worktreeSlug?: string;
+    refName?: string;
+    action?: "branch-off" | "checkout";
+  }) => Promise<CreateWorktreeResult>;
 
   allAgents: AgentSnapshot[];
   agents: AgentSnapshot[];
@@ -1965,6 +1974,55 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const createWorktree = useCallback(
+    async (params: {
+      projectId: string;
+      cwd?: string;
+      worktreeSlug?: string;
+      refName?: string;
+      action?: "branch-off" | "checkout";
+    }): Promise<CreateWorktreeResult> => {
+      let resolvedCwd = params.cwd;
+      if (!resolvedCwd) {
+        const prj = projects.find((p) => p.id === params.projectId);
+        resolvedCwd = prj?.rootPath;
+      }
+      if (!resolvedCwd) {
+        const ws = workspaces.find((w) => w.projectId === params.projectId);
+        resolvedCwd = ws?.path;
+      }
+      if (!resolvedCwd) {
+        return { error: "Project root path could not be found" };
+      }
+
+      try {
+        const res = await client.createWorktree({
+          cwd: resolvedCwd,
+          projectId: params.projectId,
+          worktreeSlug: params.worktreeSlug,
+          refName: params.refName,
+          action: params.action,
+        });
+
+        if (res.error) {
+          return { error: res.error, errorCode: res.errorCode };
+        }
+
+        await refreshWorkspaces();
+
+        if (res.workspace?.id) {
+          setActiveWorkspaceId(res.workspace.id);
+        }
+
+        return res;
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] createWorktree error:", err);
+        return { error: err?.message || String(err) };
+      }
+    },
+    [client, projects, workspaces, refreshWorkspaces, setActiveWorkspaceId],
+  );
+
   const createAgentTab = useCallback(
     async (initialPrompt?: string): Promise<AgentSnapshot | null> => {
       // Clear timeline immediately so previous session contents disappear instantly
@@ -2120,6 +2178,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeWorkspace,
         setActiveWorkspaceId,
         refreshWorkspaces,
+        createWorktree,
 
         allAgents,
         agents,

@@ -20,6 +20,8 @@ import type {
   AgentPermissionResponse,
   ImageAttachment,
   AgentSlashCommand,
+  CreateWorktreeParams,
+  CreateWorktreeResult,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -404,6 +406,42 @@ export class PaseoClient {
   public async openProject(cwd: string): Promise<{ workspace: WorkspaceItem }> {
     const res = await this.daemon.openProject(cwd);
     return res as any;
+  }
+
+  public async createWorktree(params: CreateWorktreeParams): Promise<CreateWorktreeResult> {
+    const res = await this.daemon.createPaseoWorktree({
+      cwd: params.cwd,
+      projectId: params.projectId,
+      worktreeSlug: params.worktreeSlug,
+      refName: params.refName,
+      action: params.action,
+    });
+    return res as any;
+  }
+
+  public async getBranchSuggestions(params: {
+    cwd: string;
+    query?: string;
+    limit?: number;
+  }): Promise<string[]> {
+    try {
+      const res = await this.daemon.getBranchSuggestions(params);
+      return res?.branches || [];
+    } catch {
+      return [];
+    }
+  }
+
+  public async validateBranch(params: {
+    cwd: string;
+    branchName: string;
+  }): Promise<{ exists: boolean; resolvedRef?: string | null; error?: string | null }> {
+    try {
+      const res = await this.daemon.validateBranch(params);
+      return res || { exists: false, resolvedRef: null, error: null };
+    } catch (err: any) {
+      return { exists: false, resolvedRef: null, error: err?.message || String(err) };
+    }
   }
 
   public async fetchAgentTimeline(agentId: string): Promise<{ entries: any[] }> {

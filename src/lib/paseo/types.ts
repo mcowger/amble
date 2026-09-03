@@ -113,6 +113,20 @@ export interface WorktreeItem {
   isClean?: boolean;
 }
 
+export interface CreateWorktreeParams {
+  cwd: string;
+  projectId?: string;
+  worktreeSlug?: string;
+  refName?: string;
+  action?: "branch-off" | "checkout";
+}
+
+export interface CreateWorktreeResult {
+  workspace?: WorkspaceItem | null;
+  error?: string | null;
+  errorCode?: string;
+}
+
 // Agent / Session
 export interface ImageAttachment {
   data: string;
