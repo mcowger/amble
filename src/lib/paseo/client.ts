@@ -18,6 +18,7 @@ import type {
   TerminalSessionInfo,
   GitStatusSummary,
   AgentPermissionResponse,
+  ImageAttachment,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -409,6 +410,7 @@ export class PaseoClient {
     mode?: string | null;
     thinkingEffort?: string;
     initialPrompt?: string;
+    images?: Array<{ data: string; mimeType: string }>;
   }): Promise<{ agent: AgentSnapshot }> {
     const agent = await this.daemon.createAgent({
       workspaceId: params.workspaceId,
@@ -421,6 +423,7 @@ export class PaseoClient {
         thinkingOptionId: params.thinkingEffort === "off" ? undefined : params.thinkingEffort,
       },
       initialPrompt: params.initialPrompt,
+      images: params.images,
     });
     return { agent: agent as any };
   }
@@ -429,10 +432,12 @@ export class PaseoClient {
     agentId: string;
     text: string;
     attachments?: string[];
+    images?: Array<{ data: string; mimeType: string }>;
   }): Promise<{ accepted: boolean }> {
     await this.setAgentTimelineSubscription([params.agentId]).catch(() => {});
     await this.daemon.sendAgentMessage(params.agentId, params.text, {
       attachments: params.attachments as any,
+      images: params.images,
     });
     return { accepted: true };
   }
@@ -443,6 +448,13 @@ export class PaseoClient {
 
   public async archiveAgent(agentId: string): Promise<any> {
     return this.daemon.archiveAgent(agentId);
+  }
+
+  public async updateAgent(
+    agentId: string,
+    updates: { name?: string; labels?: Record<string, string> },
+  ): Promise<void> {
+    return this.daemon.updateAgent(agentId, updates);
   }
 
   public async setAgentModel(
@@ -552,6 +564,14 @@ export class PaseoClient {
       this.slotTerminals.delete(slot);
     }
     return this.daemon.killTerminal(terminalId);
+  }
+
+  public async renameTerminal(params: {
+    terminalId: string;
+    title: string;
+  }): Promise<{ success: boolean }> {
+    const res = await this.daemon.renameTerminal(params);
+    return { success: (res as any)?.success ?? true };
   }
 
   public async getGitStatus(workspaceIdOrCwd: string): Promise<GitStatusSummary> {

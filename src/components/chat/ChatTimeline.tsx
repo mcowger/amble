@@ -124,8 +124,6 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
 
     if (
       isNearBottom ||
-      isTurnRunning ||
-      timeline.length > prevTimelineLengthRef.current ||
       agentPendingPermissions.length > 0
     ) {
       scrollRef.current.scrollTo({

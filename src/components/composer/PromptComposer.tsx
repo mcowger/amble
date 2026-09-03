@@ -1,10 +1,16 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { ModelSelector } from "./ModelSelector";
 import { EffortSelector } from "./EffortSelector";
 import { SlashCommands, type SlashCommandItem } from "./SlashCommands";
 import { FileMentionPopup } from "./FileMentionPopup";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import type { ImageAttachment } from "../../lib/paseo/types";
+import {
+  isValidImageFile,
+  fileToImageAttachment,
+  getImagesFromClipboard,
+} from "../../lib/vision";
 import {
   ArrowUp,
   Square,
@@ -21,6 +27,10 @@ import {
   Search,
   Check,
   ChevronDown,
+  Plus,
+  X,
+  AlertCircle,
+  Image as ImageIcon,
 } from "lucide-react";
 
 function getModeIcon(modeId: string) {
@@ -51,13 +61,19 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     toggleDrawer,
     refreshTimeline,
     gitStatus,
+    isVisionCapable,
   } = useWorkspace();
 
   const [prompt, setPrompt] = useState(initialValue);
   const [slashFilter, setSlashFilter] = useState<string | null>(null);
   const [mentionFilter, setMentionFilter] = useState<string | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (initialValue) {
@@ -67,6 +83,16 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
       }
     }
   }, [initialValue]);
+
+  // Clear pending images if model switches to a non-vision model
+  useEffect(() => {
+    if (!isVisionCapable && pendingImages.length > 0) {
+      setPendingImages([]);
+      setImageError("Pending image attachments removed because selected model does not support images.");
+    } else if (isVisionCapable) {
+      setImageError((prev) => (prev?.includes("removed because selected model") ? null : prev));
+    }
+  }, [isVisionCapable, pendingImages.length]);
 
   // Autosize textarea
   useEffect(() => {
@@ -79,14 +105,132 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
   }, [prompt]);
 
+  const handleAddFiles = useCallback(async (files: File[]) => {
+    setImageError(null);
+    if (files.length === 0) return;
+
+    if (!isVisionCapable) {
+      setImageError("Selected model does not support image input. Please switch to a vision model to attach images.");
+      return;
+    }
+
+    const newAttachments: ImageAttachment[] = [];
+    for (const file of files) {
+      const validation = isValidImageFile(file);
+      if (!validation.valid) {
+        setImageError(validation.error || "Invalid image file");
+        continue;
+      }
+      try {
+        const att = await fileToImageAttachment(file);
+        newAttachments.push(att);
+      } catch {
+        setImageError(`Failed to read image: ${file.name}`);
+      }
+    }
+
+    if (newAttachments.length > 0) {
+      setPendingImages((prev) => [...prev, ...newAttachments]);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  }, [isVisionCapable]);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleAddFiles(Array.from(e.target.files));
+      e.target.value = "";
+    }
+  };
+
+  const removePendingImage = (index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const images = getImagesFromClipboard(e);
+    if (images.length > 0) {
+      e.preventDefault();
+      handleAddFiles(images);
+    }
+  };
+
+  // Window-level drag and drop so users can drop images anywhere into the chat window
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleWindowDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types?.includes("Files")) {
+        dragCounter++;
+        setIsDraggingOver(true);
+      }
+    };
+
+    const handleWindowDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        setIsDraggingOver(false);
+      }
+    };
+
+    const handleWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types?.includes("Files")) {
+        setIsDraggingOver(true);
+      }
+    };
+
+    const handleWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDraggingOver(false);
+
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        const imageFiles: File[] = [];
+        for (let i = 0; i < e.dataTransfer.files.length; i++) {
+          const file = e.dataTransfer.files[i];
+          if (file && file.type.startsWith("image/")) {
+            imageFiles.push(file);
+          }
+        }
+        if (imageFiles.length > 0) {
+          handleAddFiles(imageFiles);
+        }
+      }
+    };
+
+    window.addEventListener("dragenter", handleWindowDragEnter);
+    window.addEventListener("dragleave", handleWindowDragLeave);
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drop", handleWindowDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleWindowDragEnter);
+      window.removeEventListener("dragleave", handleWindowDragLeave);
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drop", handleWindowDrop);
+    };
+  }, [handleAddFiles]);
+
   const handleSend = async () => {
     const trimmed = prompt.trim();
-    if (!trimmed || isTurnRunning) return;
+    if ((!trimmed && pendingImages.length === 0) || isTurnRunning) return;
+
+    const imagesToSend = pendingImages.length > 0 ? [...pendingImages] : undefined;
+    const textToSend = trimmed || (imagesToSend?.length ? "Describe this image" : "");
+
     setPrompt("");
+    setPendingImages([]);
+    setImageError(null);
     setSlashFilter(null);
     setMentionFilter(null);
+
     try {
-      await sendMessage(trimmed);
+      await sendMessage(textToSend, undefined, imagesToSend);
     } catch (err) {
       console.error("[PromptComposer] Send failed:", err);
     }
@@ -217,14 +361,103 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         />
       )}
 
+      {/* Full-window drop target overlay */}
+      {isDraggingOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs pointer-events-none transition-all">
+          <div
+            className={`flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed ${
+              isVisionCapable ? "border-primary bg-card/95" : "border-destructive/60 bg-card/95"
+            } shadow-2xl space-y-3 max-w-sm text-center`}
+          >
+            <div
+              className={`p-3 rounded-full ${
+                isVisionCapable ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
+              }`}
+            >
+              {isVisionCapable ? <Plus className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                {isVisionCapable ? "Drop images to attach" : "Images Not Supported"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {isVisionCapable
+                  ? "PNG, JPEG, WebP, GIF up to 20MB"
+                  : "The selected model does not support image input. Please select a vision model."}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Composer Box */}
-      <div className="rounded-2xl border border-border bg-card shadow-lg p-3 space-y-2 text-card-foreground">
+      <div
+        className={`rounded-2xl border ${
+          isDraggingOver
+            ? "border-primary ring-2 ring-primary/20 bg-primary/5"
+            : "border-border bg-card"
+        } shadow-lg p-3 space-y-2 text-card-foreground transition-colors`}
+      >
+        {/* Error Notification */}
+        {imageError && (
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs font-medium">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{imageError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImageError(null)}
+              className="p-0.5 rounded-sm hover:bg-destructive/20 cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Pending Image Attachments Preview Strip */}
+        {pendingImages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 p-1 pt-0">
+            {pendingImages.map((img, idx) => (
+              <div
+                key={idx}
+                className="group relative flex items-center gap-2 px-2 py-1.5 rounded-xl border border-border/80 bg-muted/60 hover:bg-muted text-card-foreground transition-all max-w-[220px]"
+              >
+                <img
+                  src={`data:${img.mimeType};base64,${img.data}`}
+                  alt={img.name || `Image ${idx + 1}`}
+                  className="w-8 h-8 rounded-md object-cover border border-border/40 shrink-0 bg-background"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-medium truncate text-foreground">
+                    {img.name || `Image ${idx + 1}`}
+                  </div>
+                  {img.size && (
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      {(img.size / 1024).toFixed(0)} KB
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removePendingImage(idx)}
+                  className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-background/80 cursor-pointer transition-colors"
+                  title="Remove image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Text Input Area */}
         <textarea
           ref={textareaRef}
           value={prompt}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Ask Paseo to write code, debug issues, or execute commands... (type / for commands, @ for files)"
           rows={2}
           className="w-full resize-none bg-transparent border-0 p-1 text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden leading-relaxed max-h-56 touch-manipulation"
@@ -232,8 +465,32 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
 
         {/* Controls Row */}
         <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40 select-none">
-          {/* Left: Mode selector & Model / Effort */}
+          {/* Left: Mode selector & Model / Effort & Image upload button */}
           <div className="flex min-w-0 flex-1 items-center gap-1">
+            {/* Upload Button: Visible & active when isVisionCapable */}
+            {isVisionCapable && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
+                  title="Attach image (vision model active)"
+                  aria-label="Attach image"
+                >
+                  <Plus className="w-3.5 h-3.5 text-primary" />
+                  <span className="hidden sm:inline text-[11px]">Image</span>
+                </button>
+              </>
+            )}
+
             {/* Mode Pills */}
             {modes.length > 0 && (
               <>
@@ -350,9 +607,9 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() && pendingImages.length === 0}
                 className={`p-2 rounded-xl text-xs font-medium cursor-pointer transition-all shadow-xs ${
-                  prompt.trim()
+                  prompt.trim() || pendingImages.length > 0
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                 }`}

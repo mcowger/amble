@@ -114,6 +114,13 @@ export interface WorktreeItem {
 }
 
 // Agent / Session
+export interface ImageAttachment {
+  data: string;
+  mimeType: string;
+  name?: string;
+  size?: number;
+}
+
 export interface AgentModel {
   id: string;
   name: string;
@@ -125,6 +132,8 @@ export interface AgentModel {
   contextWindow?: number;
   outputLimit?: number;
   reasoningSupported?: boolean;
+  supportsVision?: boolean;
+  metadata?: Record<string, unknown>;
   thinkingSetIndex?: number;
   thinkingOptions?: Array<{ id: string; label: string; isDefault?: boolean }>;
   availableModes?: AgentMode[];
@@ -195,6 +204,7 @@ export interface UserMessageTimelineItem {
   clientMessageId?: string;
   timestamp?: string;
   attachments?: string[];
+  images?: ImageAttachment[];
 }
 
 export interface AssistantMessageTimelineItem {
@@ -215,10 +225,13 @@ export interface ReasoningTimelineItem {
 
 export interface ToolCallTimelineItem {
   type: "tool_call";
-  tool: string;
+  tool?: string;
+  name?: string;
   callId: string;
-  input: Record<string, unknown> | string | unknown;
+  input?: Record<string, unknown> | string | unknown;
   output?: Record<string, unknown> | string | unknown;
+  detail?: any;
+  metadata?: Record<string, unknown>;
   status: "running" | "completed" | "failed" | "canceled";
   error?: unknown;
   title?: string;

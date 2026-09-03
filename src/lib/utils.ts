@@ -49,3 +49,29 @@ export function formatDuration(ms?: number): string {
   const remSec = sec % 60;
   return `${min}m ${remSec}s`;
 }
+
+export function formatRelativePath(filePath?: string, cwd?: string): string {
+  if (!filePath) return "";
+  if (!cwd) return filePath;
+
+  const normalizedCwd = cwd.replace(/[/\\]+$/, "");
+  if (filePath === normalizedCwd) {
+    return ".";
+  }
+
+  if (filePath.startsWith(normalizedCwd + "/")) {
+    return filePath.slice(normalizedCwd.length + 1);
+  }
+
+  if (filePath.startsWith(normalizedCwd + "\\")) {
+    return filePath.slice(normalizedCwd.length + 1);
+  }
+
+  return filePath;
+}
+
+export function stripCwdFromText(text?: string, cwd?: string): string {
+  if (!text || !cwd) return text || "";
+  const normalizedCwd = cwd.replace(/[/\\]+$/, "");
+  return text.replaceAll(normalizedCwd + "/", "").replaceAll(normalizedCwd + "\\", "");
+}

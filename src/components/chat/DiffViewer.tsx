@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { FileCode, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
+import { useWorkspace } from "../../context/WorkspaceContext";
+import { formatRelativePath } from "../../lib/utils";
 
 interface DiffViewerProps {
   filePath?: string;
@@ -9,6 +11,10 @@ interface DiffViewerProps {
 }
 
 export function DiffViewer({ filePath, diffText, oldString, newString }: DiffViewerProps) {
+  const { activeWorkspace, activeAgent } = useWorkspace();
+  const cwd = activeAgent?.cwd || activeAgent?.project?.checkout?.cwd || activeWorkspace?.path;
+  const displayPath = formatRelativePath(filePath, cwd) || "Diff";
+
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -62,7 +68,7 @@ export function DiffViewer({ filePath, diffText, oldString, newString }: DiffVie
         >
           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           <FileCode className="w-4 h-4 text-primary shrink-0" />
-          <span className="truncate">{filePath || "Diff"}</span>
+          <span className="truncate">{displayPath}</span>
         </button>
 
         <div className="flex items-center gap-2">

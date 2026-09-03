@@ -3,7 +3,7 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { ScrollArea } from "../ui/scroll-area";
 import { Input } from "../ui/input";
-import { Sparkles, ChevronDown, Check, Brain, Search } from "lucide-react";
+import { Sparkles, ChevronDown, Check, Brain, Search, Eye } from "lucide-react";
 import { formatTokens } from "../../lib/utils";
 
 export function ModelSelector() {
@@ -131,6 +131,11 @@ export function ModelSelector() {
                         {model.reasoningSupported && (
                           <span title="Reasoning supported">
                             <Brain className="w-3 h-3 text-blue-500 shrink-0" />
+                          </span>
+                        )}
+                        {model.supportsVision && (
+                          <span title="Vision / Image input supported">
+                            <Eye className="w-3 h-3 text-emerald-500 shrink-0" />
                           </span>
                         )}
                       </div>

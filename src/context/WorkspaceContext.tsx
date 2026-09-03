@@ -17,9 +17,11 @@ import type {
   PendingPermission,
   AgentPermissionResponse,
   AgentPermissionRequest,
+  ImageAttachment,
 } from "../lib/paseo/types";
+import { isModelVisionCapable } from "../lib/vision";
 
-export type ActiveTabKind = "agent" | "terminal";
+export type ActiveTabKind = "agent" | "terminal" | "changes";
 
 export interface WorkspaceTabItem {
   id: string;
@@ -51,6 +53,9 @@ interface WorkspaceContextType {
   closeTab: (tab: WorkspaceTabItem) => Promise<void>;
   createAgentTab: (initialPrompt?: string) => Promise<AgentSnapshot | null>;
   createTerminalTab: () => Promise<void>;
+  openChangesTab: () => void;
+  updateAgentTitle: (agentId: string, title: string) => Promise<void>;
+  renameTab: (tab: WorkspaceTabItem, newTitle: string) => Promise<void>;
   archiveAgentSession: (agentId: string) => Promise<void>;
   killTerminalSession: (terminalId: string) => Promise<void>;
 
@@ -68,6 +73,7 @@ interface WorkspaceContextType {
   models: AgentModel[];
   selectedModel: string;
   setSelectedModel: (model: string) => void;
+  isVisionCapable: boolean;
   
   modes: AgentMode[];
   selectedMode: string | null;
@@ -78,8 +84,8 @@ interface WorkspaceContextType {
   setThinkingEffort: (effort: string) => void;
 
   isTurnRunning: boolean;
-  sendMessage: (text: string, attachments?: string[]) => Promise<void>;
-  createSession: (initialPrompt?: string, targetWorkspaceId?: string) => Promise<AgentSnapshot | null>;
+  sendMessage: (text: string, attachments?: string[], images?: ImageAttachment[]) => Promise<void>;
+  createSession: (initialPrompt?: string, targetWorkspaceId?: string, images?: ImageAttachment[]) => Promise<AgentSnapshot | null>;
   cancelTurn: () => Promise<void>;
 
   // Drawer
@@ -225,6 +231,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     kind: ActiveTabKind;
     targetId: string;
   } | null>(null);
+  const [isChangesTabOpen, setIsChangesTabOpen] = useState<boolean>(false);
 
   const activeAgent =
     allAgents.find((a) => a.id === activeAgentId) ||
@@ -277,8 +284,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
+    // Changes tab if open
+    if (isChangesTabOpen || activeTabTarget?.kind === "changes") {
+      const changedCount =
+        (gitStatus?.stagedFiles?.length || 0) + (gitStatus?.unstagedFiles?.length || 0);
+      tabs.push({
+        id: "changes",
+        kind: "changes",
+        targetId: "changes",
+        title: changedCount > 0 ? `Changes (${changedCount})` : "Changes",
+      });
+    }
+
     return tabs;
-  }, [resolvedWorkspaceId, allAgents, terminals, activeWorkspace]);
+  }, [resolvedWorkspaceId, allAgents, terminals, activeWorkspace, isChangesTabOpen, activeTabTarget, gitStatus]);
 
   const activeTab = useMemo<WorkspaceTabItem | null>(() => {
     if (activeTabTarget) {
@@ -302,6 +321,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const selectedModelDefinition =
     models.find((model) => model.id === selectedModel) ||
     models.find((model) => model.id === resolveCanonicalModelId(selectedModel, models));
+
+  const isVisionCapable = useMemo(() => {
+    return isModelVisionCapable(selectedModelDefinition || selectedModel, models);
+  }, [selectedModelDefinition, selectedModel, models]);
   const modes = useMemo(() => {
     if (activeAgent) {
       if (activeAgent.availableModes && activeAgent.availableModes.length > 0) {
@@ -554,6 +577,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                 ? thinkingSets[thinkingSetIdx].options
                 : undefined;
 
+            const supportsVision = isModelVisionCapable({
+              id: m.id,
+              name: m.label || m.name || m.id,
+              displayName: m.label || m.name,
+              provider: m.metadata?.providerId || p.provider || "custom",
+              metadata: m.metadata,
+            });
+
             parsedModels.push({
               id: m.id,
               name: m.label || m.name || m.id,
@@ -565,6 +596,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               contextWindow: m.metadata?.contextWindowMaxTokens || m.contextWindow,
               outputLimit: m.metadata?.limit?.output,
               reasoningSupported: thinkingSetIdx >= 0,
+              supportsVision,
+              metadata: m.metadata,
               thinkingSetIndex: thinkingSetIdx,
               thinkingOptions: tSet,
               availableModes: Array.isArray(p.modes) ? p.modes.map(normalizeMode) : [],
@@ -874,7 +907,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                 (p.text === item.text || (item.messageId && p.messageId === item.messageId)),
             );
             if (idx >= 0) {
-              next[idx] = item;
+              const existing = next[idx] as UserMessageTimelineItem;
+              next[idx] = {
+                ...item,
+                images: (item as any).images || existing.images,
+              };
               return next;
             }
             return [...next, item];
@@ -995,6 +1032,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (term) {
           setActiveTerminalSlot(term.slot);
         }
+      } else if (tab.kind === "changes") {
+        setIsChangesTabOpen(true);
       }
     },
     [terminals],
@@ -1010,6 +1049,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const closeTab = useCallback(
     async (tab: WorkspaceTabItem): Promise<void> => {
       try {
+        if (tab.kind === "changes") {
+          setIsChangesTabOpen(false);
+          if (activeTab?.targetId === "changes") {
+            const remaining = workspaceTabs.filter((t) => t.kind !== "changes");
+            if (remaining.length > 0) {
+              setActiveTab(remaining[0]!);
+            } else {
+              setActiveTabTarget(null);
+            }
+          }
+          return;
+        }
+
         if (tab.kind === "agent") {
           await client.archiveAgent(tab.targetId);
           await refreshAgents();
@@ -1039,6 +1091,59 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [client, refreshAgents, refreshTerminals, activeTab, workspaceTabs, setActiveTab],
+  );
+
+  const openChangesTab = useCallback(() => {
+    setIsChangesTabOpen(true);
+    setActiveTabTarget({ kind: "changes", targetId: "changes" });
+  }, []);
+
+  const updateAgentTitle = useCallback(
+    async (agentId: string, title: string): Promise<void> => {
+      const trimmed = title.trim();
+      if (!agentId || !trimmed) return;
+      try {
+        setAllAgents((prev) =>
+          prev.map((a) => (a.id === agentId ? { ...a, title: trimmed, name: trimmed } : a)),
+        );
+        setAgents((prev) =>
+          prev.map((a) => (a.id === agentId ? { ...a, title: trimmed, name: trimmed } : a)),
+        );
+        await client.updateAgent(agentId, { name: trimmed });
+        await refreshAgents();
+      } catch (err) {
+        console.warn("[WorkspaceProvider] updateAgentTitle error:", err);
+      }
+    },
+    [client, refreshAgents],
+  );
+
+  const renameTerminalSession = useCallback(
+    async (terminalId: string, title: string): Promise<void> => {
+      const trimmed = title.trim();
+      if (!terminalId || !trimmed) return;
+      try {
+        setTerminals((prev) =>
+          prev.map((t) => (t.id === terminalId ? { ...t, title: trimmed } : t)),
+        );
+        await client.renameTerminal({ terminalId, title: trimmed });
+        await refreshTerminals();
+      } catch (err) {
+        console.warn("[WorkspaceProvider] renameTerminalSession error:", err);
+      }
+    },
+    [client, refreshTerminals],
+  );
+
+  const renameTab = useCallback(
+    async (tab: WorkspaceTabItem, newTitle: string): Promise<void> => {
+      if (tab.kind === "agent") {
+        await updateAgentTitle(tab.targetId, newTitle);
+      } else if (tab.kind === "terminal") {
+        await renameTerminalSession(tab.targetId, newTitle);
+      }
+    },
+    [updateAgentTitle, renameTerminalSession],
   );
 
   const createTerminalTab = useCallback(async (): Promise<void> => {
@@ -1168,11 +1273,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [client, refreshAgents, refreshTimeline],
   );
 
-  const sendMessage = async (text: string, attachments?: string[]) => {
+  const sendMessage = async (
+    text: string,
+    attachments?: string[],
+    images?: ImageAttachment[],
+  ) => {
     let targetAgentId = activeAgentId;
 
     if (!targetAgentId) {
-      const created = await createSession(text);
+      const created = await createSession(text, undefined, images);
       if (created) return;
       throw new Error("No active session to send message to");
     }
@@ -1193,6 +1302,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       text,
       timestamp: new Date().toISOString(),
       attachments,
+      images,
     };
     setTimeline((prev) => [...prev, userItem]);
     setIsTurnRunning(true);
@@ -1202,6 +1312,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         agentId: targetAgentId,
         text,
         attachments,
+        images,
       });
     } catch (err) {
       setIsTurnRunning(false);
@@ -1219,6 +1330,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const createSession = async (
     initialPrompt?: string,
     targetWorkspaceId?: string,
+    images?: ImageAttachment[],
   ): Promise<AgentSnapshot | null> => {
     try {
       let resolvedWorkspaceId = targetWorkspaceId || activeWorkspaceId;
@@ -1257,6 +1369,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         mode: selectedMode,
         thinkingEffort,
         initialPrompt,
+        images,
       });
 
       if (res && res.agent) {
@@ -1370,6 +1483,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         closeTab,
         createAgentTab,
         createTerminalTab,
+        openChangesTab,
+        updateAgentTitle,
+        renameTab,
         archiveAgentSession,
         killTerminalSession,
 
@@ -1383,6 +1499,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         models,
         selectedModel,
         setSelectedModel,
+        isVisionCapable,
 
         modes,
         selectedMode,

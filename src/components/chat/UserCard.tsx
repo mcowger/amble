@@ -1,10 +1,17 @@
 import React, { useState } from "react";
-import { Copy, Check, User } from "lucide-react";
+import { Copy, Check, User, ZoomIn } from "lucide-react";
 import { formatTime } from "../../lib/utils";
-import type { UserMessageTimelineItem } from "../../lib/paseo/types";
+import type { UserMessageTimelineItem, ImageAttachment } from "../../lib/paseo/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 
 export function UserCard({ item }: { item: UserMessageTimelineItem }) {
   const [copied, setCopied] = useState(false);
+  const [previewImage, setPreviewImage] = useState<ImageAttachment | null>(null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(item.text);
@@ -41,9 +48,38 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
       </div>
 
       {/* Message Text */}
-      <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-        {item.text}
-      </div>
+      {item.text && (
+        <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+          {item.text}
+        </div>
+      )}
+
+      {/* Uploaded Images */}
+      {item.images && item.images.length > 0 && (
+        <div className="flex flex-wrap gap-3 mt-3 pt-2.5 border-t border-border/40">
+          {item.images.map((img, idx) => (
+            <div
+              key={idx}
+              onClick={() => setPreviewImage(img)}
+              className="group/img relative overflow-hidden rounded-xl border border-border/80 bg-muted/40 hover:border-primary/50 cursor-pointer transition-all shadow-xs"
+            >
+              <img
+                src={`data:${img.mimeType};base64,${img.data}`}
+                alt={img.name || `Image attachment ${idx + 1}`}
+                className="max-h-48 max-w-xs object-cover rounded-lg group-hover/img:scale-[1.02] transition-transform"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 flex items-center justify-center transition-colors">
+                <ZoomIn className="w-5 h-5 text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-md" />
+              </div>
+              {img.name && (
+                <div className="p-1.5 px-2 bg-card/90 border-t border-border/40 text-[11px] font-mono text-muted-foreground truncate max-w-xs">
+                  {img.name}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Attachments if any */}
       {item.attachments && item.attachments.length > 0 && (
@@ -57,6 +93,26 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
             </span>
           ))}
         </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+          <DialogContent className="max-w-3xl p-4 sm:rounded-2xl">
+            <DialogHeader className="mb-2">
+              <DialogTitle className="text-sm font-semibold truncate">
+                {previewImage.name || "Image Preview"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center justify-center max-h-[75vh] overflow-auto rounded-xl bg-muted/30 p-2">
+              <img
+                src={`data:${previewImage.mimeType};base64,${previewImage.data}`}
+                alt={previewImage.name || "Attachment"}
+                className="max-h-[70vh] w-auto max-w-full object-contain rounded-lg shadow-md"
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
