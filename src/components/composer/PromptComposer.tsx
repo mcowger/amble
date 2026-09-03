@@ -481,7 +481,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
+                  className="h-7 flex items-center justify-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
                   title="Attach image (vision model active)"
                   aria-label="Attach image"
                 >
@@ -494,7 +494,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
             {/* Mode Pills */}
             {modes.length > 0 && (
               <>
-                <div className="hidden md:flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30 shrink-0">
+                <div className="hidden md:flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30 shrink-0 h-7">
                 {modes.map((m) => {
                   const isActive = m.id === selectedMode;
                   return (
@@ -503,7 +503,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       type="button"
                       onClick={() => setSelectedMode(m.id)}
                       disabled={!canChangeMode || isActive}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                      className={`h-6 flex items-center gap-1 px-2 rounded-md text-[11px] font-medium transition-colors ${
                         isActive
                           ? "bg-background text-foreground shadow-2xs font-semibold"
                           : "text-muted-foreground hover:text-foreground"
@@ -533,7 +533,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       <button
                         type="button"
                         disabled={!canChangeMode}
-                        className="md:hidden flex min-w-0 max-w-[80px] shrink-0 items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
+                        className="h-7 md:hidden flex min-w-0 max-w-[80px] shrink-0 items-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
                         title={
                           canChangeMode
                             ? "Select agent mode"
@@ -597,25 +597,66 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
               <button
                 type="button"
                 onClick={cancelTurn}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer shadow-xs transition-colors shrink-0"
-                title="Interrupt Agent Execution"
+                className="group relative h-7 w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
+                title="Stop generation"
+                aria-label="Stop generation"
               >
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>Stop</span>
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {/* Subtle track circle */}
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="9"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="opacity-25"
+                  />
+                  {/* Rotating spinner arc inspired by lucide-animated loader-circle */}
+                  <g
+                    className="animate-spin"
+                    style={{ transformOrigin: "12px 12px" }}
+                  >
+                    <path
+                      d="M21 12a9 9 0 1 1-6.219-8.56"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                    />
+                  </g>
+                  {/* Centered stop square with rounded corners */}
+                  <rect
+                    x="8.5"
+                    y="8.5"
+                    width="7"
+                    height="7"
+                    rx="1.5"
+                    fill="currentColor"
+                    stroke="none"
+                    className="transition-transform group-hover:scale-110"
+                    style={{ transformOrigin: "12px 12px" }}
+                  />
+                </svg>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={!prompt.trim() && pendingImages.length === 0}
-                className={`p-1.5 sm:p-2 rounded-xl text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 ${
+                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 ${
                   prompt.trim() || pendingImages.length > 0
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 active:scale-95"
                     : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                 }`}
                 title="Send Message (Enter)"
+                aria-label="Send message"
               >
-                <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+                <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
               </button>
             )}
           </div>

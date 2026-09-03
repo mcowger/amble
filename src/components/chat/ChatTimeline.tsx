@@ -271,14 +271,6 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
               }
             />
           ))}
-
-          {/* Turn Running Indicator at bottom of timeline */}
-          {isTurnRunning && agentPendingPermissions.length === 0 && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-1 animate-pulse">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
-              <span>Paseo is thinking and working...</span>
-            </div>
-          )}
         </div>
       </ScrollArea>
 

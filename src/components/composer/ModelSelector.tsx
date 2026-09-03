@@ -58,7 +58,7 @@ export function ModelSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
+          className="h-7 flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
           title={`Select Model: ${current.displayName || current.name}`}
         >
           <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
