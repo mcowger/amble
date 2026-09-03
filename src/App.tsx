@@ -14,11 +14,17 @@ import "./index.css";
 
 function WorkspaceMain() {
   const [composerPrompt, setComposerPrompt] = useState("");
-  const { activeTab } = useWorkspace();
+  const { activeTab, workspaceTabs } = useWorkspace();
 
   const handleSelectPrompt = (prompt: string) => {
     setComposerPrompt(prompt);
   };
+
+  const isChangesActive = activeTab?.kind === "changes";
+  const isAgentActive = !activeTab || activeTab.kind === "agent";
+  const terminalTabs = workspaceTabs.filter((t) => t.kind === "terminal");
+  const isFallbackTerminal =
+    activeTab?.kind === "terminal" && !terminalTabs.some((t) => t.targetId === activeTab.targetId);
 
   return (
     <AppShell drawer={<BottomDrawer />}>
@@ -27,25 +33,61 @@ function WorkspaceMain() {
         <WorkspaceTabsRow />
 
         {/* Tab Content */}
-        {activeTab?.kind === "terminal" ? (
-          <TerminalView
-            key={activeTab.id}
-            slot={activeTab.slot ?? 0}
-            terminalId={activeTab.targetId}
-          />
-        ) : activeTab?.kind === "changes" ? (
-          <div className="flex-1 h-full min-h-0 overflow-hidden">
-            <ChangesDrawer />
-          </div>
-        ) : (
-          <>
-            {/* Chat Timeline */}
-            <ChatTimeline onSelectPrompt={handleSelectPrompt} />
+        {/* Terminals: keep open terminal tabs mounted so background output, scrollback, and state persist across tab switching */}
+        {terminalTabs.map((tab) => {
+          const isActive =
+            activeTab?.kind === "terminal" && activeTab?.targetId === tab.targetId;
+          return (
+            <div
+              key={tab.id}
+              className={
+                isActive
+                  ? "flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col"
+                  : "hidden"
+              }
+            >
+              <TerminalView
+                slot={tab.slot ?? 0}
+                terminalId={tab.targetId}
+                isActive={isActive}
+              />
+            </div>
+          );
+        })}
 
-            {/* Prompt Composer */}
-            <PromptComposer initialValue={composerPrompt} />
-          </>
+        {/* Fallback for in-flight terminal creation */}
+        {isFallbackTerminal && activeTab && (
+          <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col">
+            <TerminalView
+              slot={activeTab.slot ?? 0}
+              terminalId={activeTab.targetId}
+              isActive={true}
+            />
+          </div>
         )}
+
+        {/* Changes Tab */}
+        <div
+          className={
+            isChangesActive
+              ? "flex-1 h-full min-h-0 overflow-hidden flex flex-col"
+              : "hidden"
+          }
+        >
+          {isChangesActive && <ChangesDrawer />}
+        </div>
+
+        {/* Agent Tab Content (Chat Timeline + Prompt Composer) */}
+        <div
+          className={
+            isAgentActive
+              ? "flex-1 flex flex-col min-h-0 overflow-hidden"
+              : "hidden"
+          }
+        >
+          <ChatTimeline onSelectPrompt={handleSelectPrompt} />
+          <PromptComposer initialValue={composerPrompt} />
+        </div>
       </div>
     </AppShell>
   );

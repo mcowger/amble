@@ -67,7 +67,12 @@ export function BottomDrawer() {
 
       {/* Drawer Content */}
       <div className="flex-1 min-h-0">
-        {activeDrawerTab === "terminal" ? <TerminalDrawer /> : <ChangesDrawer />}
+        <div className={activeDrawerTab === "terminal" ? "h-full w-full" : "hidden"}>
+          <TerminalDrawer />
+        </div>
+        <div className={activeDrawerTab === "changes" ? "h-full w-full" : "hidden"}>
+          {activeDrawerTab === "changes" && <ChangesDrawer />}
+        </div>
       </div>
     </div>
   );

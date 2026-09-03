@@ -48,6 +48,8 @@ export class PaseoClient {
   private state: ConnectionState = "disconnected";
   private eventListeners = new Map<string, Set<EventHandler>>();
   private terminalListeners = new Map<number, Set<(data: string) => void>>();
+  private terminalIdListeners = new Map<string, Set<(data: string) => void>>();
+  private terminalBuffers = new Map<string, string>();
   private terminalSlots = new Map<string, number>();
   private slotTerminals = new Map<number, string>();
   private cleanupBrowserListeners: (() => void) | null = null;
@@ -147,13 +149,37 @@ export class PaseoClient {
     this.unsubscribeTerminalStream = daemon.onTerminalStreamEvent((event) => {
       if (event.type === "output" || event.type === "restore") {
         const text = textDecoder.decode(event.data);
+        if (event.type === "restore") {
+          this.setTerminalBuffer(event.terminalId, text);
+        } else {
+          this.appendTerminalBuffer(event.terminalId, text);
+        }
+
+        // Notify string terminalId listeners
+        const idListeners = this.terminalIdListeners.get(event.terminalId);
+        if (idListeners) {
+          idListeners.forEach((fn) => {
+            try {
+              fn(text);
+            } catch (e) {
+              console.error("[PaseoClient] Error in terminalId listener:", e);
+            }
+          });
+        }
+
         const slot = this.terminalSlots.get(event.terminalId);
         if (slot !== undefined) {
           const listeners = this.terminalListeners.get(slot);
           if (listeners) {
-            listeners.forEach((fn) => fn(text));
+            listeners.forEach((fn) => {
+              try {
+                fn(text);
+              } catch (e) {
+                console.error("[PaseoClient] Error in slot listener:", e);
+              }
+            });
           }
-          this.emit("terminal_data", { slot, data: text });
+          this.emit("terminal_data", { slot, terminalId: event.terminalId, data: text, type: event.type });
         }
       }
     });
@@ -330,7 +356,7 @@ export class PaseoClient {
                 type: "resize",
                 cols: decoded.cols,
                 rows: decoded.rows,
-                intent: decoded.intent,
+                intent: decoded.intent ?? "claim",
               });
               return;
             }
@@ -368,14 +394,139 @@ export class PaseoClient {
     }
   }
 
-  public onTerminalOutput(slot: number, handler: (data: string) => void): () => void {
-    if (!this.terminalListeners.has(slot)) {
-      this.terminalListeners.set(slot, new Set());
+  private setTerminalBuffer(terminalId: string, text: string) {
+    const MAX_BUFFER_CHARS = 1_000_000;
+    if (text.length > MAX_BUFFER_CHARS) {
+      this.terminalBuffers.set(terminalId, text.slice(text.length - MAX_BUFFER_CHARS));
+    } else {
+      this.terminalBuffers.set(terminalId, text);
     }
-    this.terminalListeners.get(slot)!.add(handler);
+  }
+
+  private appendTerminalBuffer(terminalId: string, text: string) {
+    const MAX_BUFFER_CHARS = 1_000_000;
+    const existing = this.terminalBuffers.get(terminalId) || "";
+    const updated = existing + text;
+    if (updated.length > MAX_BUFFER_CHARS) {
+      this.terminalBuffers.set(terminalId, updated.slice(updated.length - MAX_BUFFER_CHARS));
+    } else {
+      this.terminalBuffers.set(terminalId, updated);
+    }
+  }
+
+  public getTerminalBuffer(slotOrId: number | string): string {
+    const terminalId = typeof slotOrId === "string" ? slotOrId : this.slotTerminals.get(slotOrId);
+    if (!terminalId) return "";
+    return this.terminalBuffers.get(terminalId) || "";
+  }
+
+  public getTerminalSlot(terminalId: string): number | undefined {
+    return this.terminalSlots.get(terminalId);
+  }
+
+  public onTerminalOutput(
+    slotOrId: number | string,
+    handler: (data: string) => void,
+    options: { replayBuffer?: boolean } = {},
+  ): () => void {
+    const { replayBuffer = true } = options;
+    const isId = typeof slotOrId === "string";
+
+    if (isId) {
+      if (!this.terminalIdListeners.has(slotOrId)) {
+        this.terminalIdListeners.set(slotOrId, new Set());
+      }
+      this.terminalIdListeners.get(slotOrId)!.add(handler);
+    } else {
+      if (!this.terminalListeners.has(slotOrId)) {
+        this.terminalListeners.set(slotOrId, new Set());
+      }
+      this.terminalListeners.get(slotOrId)!.add(handler);
+    }
+
+    if (replayBuffer) {
+      const buffer = this.getTerminalBuffer(slotOrId);
+      if (buffer) {
+        try {
+          handler(buffer);
+        } catch (e) {
+          console.error("[PaseoClient] Error replaying terminal buffer:", e);
+        }
+      }
+    }
+
     return () => {
-      this.terminalListeners.get(slot)?.delete(handler);
+      if (isId) {
+        this.terminalIdListeners.get(slotOrId)?.delete(handler);
+      } else {
+        this.terminalListeners.get(slotOrId)?.delete(handler);
+      }
     };
+  }
+
+  public sendTerminalResize(
+    terminalIdOrSlot: string | number,
+    cols: number,
+    rows: number,
+    intent: "claim" | "update" = "claim",
+  ) {
+    const terminalId =
+      typeof terminalIdOrSlot === "string"
+        ? terminalIdOrSlot
+        : this.slotTerminals.get(terminalIdOrSlot);
+    if (terminalId) {
+      this.daemon.sendTerminalInput(terminalId, {
+        type: "resize",
+        cols,
+        rows,
+        intent,
+      });
+    }
+  }
+
+  public async subscribeTerminalSession(
+    terminalId: string,
+    options: {
+      restore?: boolean;
+      mode?: "visible-snapshot" | "full-snapshot";
+      scrollbackLines?: number;
+      size?: { rows: number; cols: number };
+    } = {},
+  ): Promise<number> {
+    const {
+      restore = true,
+      mode = "full-snapshot",
+      scrollbackLines = 500,
+      size,
+    } = options;
+
+    const isAlreadySubscribed = this.terminalSlots.has(terminalId);
+    if (isAlreadySubscribed && restore) {
+      try {
+        this.daemon.unsubscribeTerminal(terminalId);
+      } catch {}
+    }
+
+    const restoreOptions = restore
+      ? {
+          mode,
+          scrollbackLines,
+          ...(size ? { size } : {}),
+        }
+      : undefined;
+
+    const sub = await this.daemon.subscribeTerminal(terminalId, {
+      restore: restoreOptions,
+    });
+
+    if (sub.error !== null) {
+      throw new Error(sub.error || `Failed to subscribe to terminal ${terminalId}`);
+    }
+
+    const slot = sub.slot;
+    this.terminalSlots.set(terminalId, slot);
+    this.slotTerminals.set(slot, terminalId);
+    return slot;
   }
 
   // API Methods
@@ -629,7 +780,9 @@ export class PaseoClient {
         let slot = this.terminalSlots.get(t.id);
         if (slot === undefined) {
           try {
-            const sub = await this.daemon.subscribeTerminal(t.id);
+            const sub = await this.daemon.subscribeTerminal(t.id, {
+              restore: { mode: "full-snapshot", scrollbackLines: 500 },
+            });
             if (sub.error === null) {
               slot = sub.slot;
               this.terminalSlots.set(t.id, slot);
@@ -667,7 +820,9 @@ export class PaseoClient {
       throw new Error(res.error || "Failed to create terminal");
     }
     const terminalId = res.terminal.id;
-    const sub = await this.daemon.subscribeTerminal(terminalId);
+    const sub = await this.daemon.subscribeTerminal(terminalId, {
+      restore: { mode: "full-snapshot", scrollbackLines: 500 },
+    });
     if (sub.error !== null) {
       throw new Error(sub.error || "Failed to subscribe to terminal");
     }
@@ -683,6 +838,8 @@ export class PaseoClient {
       this.terminalSlots.delete(terminalId);
       this.slotTerminals.delete(slot);
     }
+    this.terminalBuffers.delete(terminalId);
+    this.terminalIdListeners.delete(terminalId);
     return this.daemon.killTerminal(terminalId);
   }
 

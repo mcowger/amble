@@ -8,6 +8,20 @@ import { encodeTerminalInput, encodeTerminalResize } from "../../lib/paseo/binar
 import { Plus, Terminal as TerminalIcon } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 
+const darkTheme = {
+  background: "#181816",
+  foreground: "#e5e5df",
+  cursor: "#f59e0b",
+  selectionBackground: "#33332d",
+};
+
+const lightTheme = {
+  background: "#fdfcfa",
+  foreground: "#393a34",
+  cursor: "#d97706",
+  selectionBackground: "#e8e4dc",
+};
+
 export function TerminalDrawer() {
   const { client } = usePaseo();
   const {
@@ -23,6 +37,9 @@ export function TerminalDrawer() {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  const activeTerminal = terminals.find((t) => t.slot === activeTerminalSlot);
+  const currentTerminalId = activeTerminal?.id;
+
   useEffect(() => {
     if (!containerRef.current || !drawerOpen) return;
 
@@ -35,19 +52,7 @@ export function TerminalDrawer() {
         cursorBlink: true,
         fontSize: 12,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: isDark
-          ? {
-              background: "#181816",
-              foreground: "#e5e5df",
-              cursor: "#f59e0b",
-              selectionBackground: "#33332d",
-            }
-          : {
-              background: "#fdfcfa",
-              foreground: "#393a34",
-              cursor: "#d97706",
-              selectionBackground: "#e8e4dc",
-            },
+        theme: isDark ? darkTheme : lightTheme,
       });
 
       fitAddon = new FitAddon();
@@ -66,7 +71,10 @@ export function TerminalDrawer() {
       fitAddonRef.current = fitAddon;
 
       onDataDisposable = term.onData((data) => {
-        const slot = activeTerminalSlot ?? 0;
+        const slot =
+          (currentTerminalId ? client.getTerminalSlot(currentTerminalId) : undefined) ??
+          activeTerminalSlot ??
+          0;
         const frame = encodeTerminalInput(slot, data);
         client.sendBinary(frame);
       });
@@ -76,21 +84,43 @@ export function TerminalDrawer() {
 
     const handleResize = () => {
       try {
-        if (fitAddon && term && containerRef.current && containerRef.current.clientWidth > 0) {
+        if (
+          fitAddon &&
+          term &&
+          containerRef.current &&
+          containerRef.current.clientWidth > 0 &&
+          containerRef.current.clientHeight > 0
+        ) {
           fitAddon.fit();
-          const slot = activeTerminalSlot ?? 0;
+          const slot =
+            (currentTerminalId ? client.getTerminalSlot(currentTerminalId) : undefined) ??
+            activeTerminalSlot ??
+            0;
           const frame = encodeTerminalResize(slot, term.cols, term.rows);
           client.sendBinary(frame);
+          if (currentTerminalId) {
+            client.sendTerminalResize(currentTerminalId, term.cols, term.rows, "claim");
+          }
         }
       } catch {
         // ignore
       }
     };
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    resizeObserver.observe(containerRef.current);
     window.addEventListener("resize", handleResize);
+
+    requestAnimationFrame(() => {
+      handleResize();
+    });
 
     return () => {
       onDataDisposable?.dispose();
+      resizeObserver.disconnect();
       window.removeEventListener("resize", handleResize);
       if (term) {
         term.dispose();
@@ -98,20 +128,52 @@ export function TerminalDrawer() {
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [isDark, activeTerminalSlot, client, drawerOpen]);
+  }, [activeTerminalSlot, currentTerminalId, client, drawerOpen]);
 
+  // Dynamically update theme without recreation
+  useEffect(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = isDark ? darkTheme : lightTheme;
+    }
+  }, [isDark]);
+
+  // Output stream and restore
   useEffect(() => {
     const slot = activeTerminalSlot ?? 0;
-    const unsub = client.onTerminalOutput(slot, (data: string) => {
-      if (xtermRef.current) {
-        xtermRef.current.write(data);
-      }
-    });
+    const idOrSlot = currentTerminalId || slot;
+    let isMounted = true;
+
+    const unsub = client.onTerminalOutput(
+      idOrSlot,
+      (data: string) => {
+        if (xtermRef.current && isMounted) {
+          xtermRef.current.write(data);
+        }
+      },
+      { replayBuffer: true },
+    );
+
+    const existingBuffer = client.getTerminalBuffer(idOrSlot);
+    if (!existingBuffer && currentTerminalId) {
+      const term = xtermRef.current;
+      const size = term ? { cols: term.cols, rows: term.rows } : undefined;
+      client
+        .subscribeTerminalSession(currentTerminalId, {
+          restore: true,
+          mode: "full-snapshot",
+          scrollbackLines: 500,
+          size,
+        })
+        .catch((err) => {
+          console.warn(`[TerminalDrawer] subscribeTerminalSession failed for ${currentTerminalId}:`, err);
+        });
+    }
 
     return () => {
+      isMounted = false;
       unsub();
     };
-  }, [client, activeTerminalSlot]);
+  }, [client, activeTerminalSlot, currentTerminalId]);
 
   return (
     <div className="flex flex-col h-full bg-background select-none">

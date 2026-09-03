@@ -9,9 +9,24 @@ import "@xterm/xterm/css/xterm.css";
 interface TerminalViewProps {
   slot: number;
   terminalId: string;
+  isActive?: boolean;
 }
 
-export function TerminalView({ slot }: TerminalViewProps) {
+const darkTheme = {
+  background: "#181816",
+  foreground: "#e5e5df",
+  cursor: "#f59e0b",
+  selectionBackground: "#33332d",
+};
+
+const lightTheme = {
+  background: "#fdfcfa",
+  foreground: "#393a34",
+  cursor: "#d97706",
+  selectionBackground: "#e8e4dc",
+};
+
+export function TerminalView({ slot, terminalId, isActive = true }: TerminalViewProps) {
   const { client } = usePaseo();
   const { isDark } = useTheme();
 
@@ -19,6 +34,7 @@ export function TerminalView({ slot }: TerminalViewProps) {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Initialize xterm instance
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -31,19 +47,7 @@ export function TerminalView({ slot }: TerminalViewProps) {
         cursorBlink: true,
         fontSize: 13,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: isDark
-          ? {
-              background: "#181816",
-              foreground: "#e5e5df",
-              cursor: "#f59e0b",
-              selectionBackground: "#33332d",
-            }
-          : {
-              background: "#fdfcfa",
-              foreground: "#393a34",
-              cursor: "#d97706",
-              selectionBackground: "#e8e4dc",
-            },
+        theme: isDark ? darkTheme : lightTheme,
       });
 
       fitAddon = new FitAddon();
@@ -63,7 +67,8 @@ export function TerminalView({ slot }: TerminalViewProps) {
       fitAddonRef.current = fitAddon;
 
       onDataDisposable = term.onData((data) => {
-        const frame = encodeTerminalInput(slot, data);
+        const currentSlot = client.getTerminalSlot(terminalId) ?? slot;
+        const frame = encodeTerminalInput(currentSlot, data);
         client.sendBinary(frame);
       });
     } catch (err) {
@@ -72,10 +77,12 @@ export function TerminalView({ slot }: TerminalViewProps) {
 
     const handleResize = () => {
       try {
-        if (fitAddon && term && containerRef.current && containerRef.current.clientWidth > 0) {
+        if (fitAddon && term && containerRef.current && containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
           fitAddon.fit();
-          const frame = encodeTerminalResize(slot, term.cols, term.rows);
+          const currentSlot = client.getTerminalSlot(terminalId) ?? slot;
+          const frame = encodeTerminalResize(currentSlot, term.cols, term.rows);
           client.sendBinary(frame);
+          client.sendTerminalResize(terminalId, term.cols, term.rows, "claim");
         }
       } catch {
         // ignore
@@ -104,20 +111,79 @@ export function TerminalView({ slot }: TerminalViewProps) {
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [isDark, slot, client]);
+  }, [slot, terminalId, client]);
 
-  // Output stream
+  // Dynamically update theme on theme change without disposing xterm
   useEffect(() => {
-    const unsub = client.onTerminalOutput(slot, (data: string) => {
-      if (xtermRef.current) {
-        xtermRef.current.write(data);
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = isDark ? darkTheme : lightTheme;
+    }
+  }, [isDark]);
+
+  // Output stream & restore subscription
+  useEffect(() => {
+    let isMounted = true;
+
+    // Register listener using terminalId (or slot fallback)
+    // replayBuffer: true immediately writes any existing in-memory buffer
+    const unsub = client.onTerminalOutput(
+      terminalId || slot,
+      (data: string) => {
+        if (xtermRef.current && isMounted) {
+          xtermRef.current.write(data);
+        }
+      },
+      { replayBuffer: true },
+    );
+
+    // If no buffer is recorded yet in client, request fresh full-snapshot from daemon
+    const existingBuffer = client.getTerminalBuffer(terminalId || slot);
+    if (!existingBuffer && terminalId) {
+      const term = xtermRef.current;
+      const size = term ? { cols: term.cols, rows: term.rows } : undefined;
+      client
+        .subscribeTerminalSession(terminalId, {
+          restore: true,
+          mode: "full-snapshot",
+          scrollbackLines: 500,
+          size,
+        })
+        .catch((err) => {
+          console.warn(`[TerminalView] subscribeTerminalSession failed for ${terminalId}:`, err);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [client, terminalId, slot]);
+
+  // Visibility / activation handling
+  useEffect(() => {
+    if (!isActive) return;
+
+    const timer = requestAnimationFrame(() => {
+      try {
+        const term = xtermRef.current;
+        const fitAddon = fitAddonRef.current;
+        const container = containerRef.current;
+        if (fitAddon && term && container && container.clientWidth > 0 && container.clientHeight > 0) {
+          fitAddon.fit();
+          const currentSlot = client.getTerminalSlot(terminalId) ?? slot;
+          const frame = encodeTerminalResize(currentSlot, term.cols, term.rows);
+          client.sendBinary(frame);
+          client.sendTerminalResize(terminalId, term.cols, term.rows, "claim");
+          term.refresh(0, (term.rows || 1) - 1);
+        }
+        term?.focus();
+      } catch {
+        // ignore
       }
     });
 
-    return () => {
-      unsub();
-    };
-  }, [client, slot]);
+    return () => cancelAnimationFrame(timer);
+  }, [isActive, client, terminalId, slot]);
 
   return (
     <div
