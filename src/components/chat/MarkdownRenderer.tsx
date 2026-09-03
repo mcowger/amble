@@ -130,6 +130,19 @@ function normalizeMarkdown(content: string): string {
     .join("");
 }
 
+const sequentialBoldThoughtPattern =
+  /((?:\*\*(?:(?!\*\*)[\s\S])+?\*\*)|(?:__(?:(?!__)[\s\S])+?__))[ \t]*(?:\r?\n[ \t]*)?(?=(?:\*\*|__))/g;
+
+// Separate adjacent bold segments emitted as individual thought chunks.
+export function normalizeThoughtMarkdown(content: string): string {
+  return normalizeMarkdown(content)
+    .split(/(```[\s\S]*?```)/g)
+    .map((part, index) =>
+      index % 2 === 1 ? part : part.replace(sequentialBoldThoughtPattern, "$1\n\n"),
+    )
+    .join("");
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -141,8 +154,11 @@ export function MarkdownRenderer({
   className,
   variant = "default",
 }: MarkdownRendererProps) {
-  const normalized = useMemo(() => normalizeMarkdown(content), [content]);
   const isThought = variant === "thought";
+  const normalized = useMemo(
+    () => (isThought ? normalizeThoughtMarkdown(content) : normalizeMarkdown(content)),
+    [content, isThought],
+  );
 
   return (
     <div
