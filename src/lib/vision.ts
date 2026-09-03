@@ -11,17 +11,69 @@ export const SUPPORTED_IMAGE_MIMES = [
 ] as const;
 
 /**
+ * Known vision / multimodal model patterns.
+ * Modern multimodal models support image input.
+ */
+const VISION_MODEL_PATTERNS = [
+  // Gemini: all 1.5, 2.0, 2.5, 3.x Flash, Pro, Ultra, Preview models are multimodal
+  /gemini/i,
+  // Meta Muse: multimodal models including muse-spark and muse-image
+  /muse/i,
+  // Claude: all Claude 3, 3.5, 3.7, 4, 4.5, 5 models (Haiku, Sonnet, Opus, Fable)
+  /claude-(?:3|4|5|haiku|sonnet|opus|fable)/i,
+  /claude-3/i,
+  /claude/i,
+  // OpenAI: GPT-4o, GPT-4-turbo, GPT-4.5, GPT-5, GPT-5.6 (luna, terra, sol), o1, o3
+  /gpt-(?:4o|4-turbo|4\.5|5|5\.6)/i,
+  /\bo[13]\b/i,
+  /\bo[13]-(?:mini|preview|full)\b/i,
+  // Qwen VL / QVQ
+  /qwen.*(?:vl|vision)/i,
+  /\bqvq\b/i,
+  // Llama Vision
+  /llama.*(?:vision|vl)/i,
+  // Pixtral
+  /pixtral/i,
+  // Kimi K3 / VL
+  /kimi-k3/i,
+  /kimi.*(?:vl|vision)/i,
+  // GLM Vision
+  /glm-.*(?:v|vision)/i,
+  // Other vision / multimodal models
+  /internvl/i,
+  /cogvlm/i,
+  /minicpm-v/i,
+  /llava/i,
+  // Generic keywords
+  /\bvision\b/i,
+  /\bmultimodal\b/i,
+  /\bvl\b/i,
+];
+
+/**
+ * Known text-only model patterns that should NOT be considered vision capable,
+ * unless explicit metadata indicates otherwise.
+ * NOTE: muse is multimodal and MUST NOT be included here.
+ */
+const TEXT_ONLY_MODEL_PATTERNS = [
+  /deepseek-(?:v2|v3|v4|coder|chat)(?!.*(?:vl|vision))/i,
+  /codellama/i,
+  /text-embedding/i,
+  /\bembedding\b/i,
+  /whisper/i,
+  /glm-(?:5\.3|4|3)(?!.*(?:v|vision))/i,
+  /claude-(?:1|2|instant)/i,
+  /gpt-3\.5/i,
+  /gpt-4-(?!turbo|vision|o\b)/i,
+];
+
+/**
  * Determines whether a given model supports vision / image input.
  *
- * The answer comes exclusively from Paseo's providers snapshot metadata.
- * Amble does no name-based guessing: if Paseo doesn't declare image
- * support, the model is treated as text-only.
- *
- * Honored signals (in order):
- * - `model.supportsVision`
- * - `model.metadata.supportsVision` / `model.metadata.supportsAttachments`
- *   (opencode provider reports `supportsAttachments`)
- * - `model.metadata.input` / `model.metadata.modalities` containing "image"
+ * Signals checked in order:
+ * 1. Explicit model / Paseo metadata (`supportsVision`, `supportsAttachments`, `input`, `modalities`)
+ * 2. When metadata is absent or unspecified (as with Plexus and custom Paseo providers):
+ *    Intelligent detection based on model family, ID, and name (e.g. Gemini, Muse, Claude 3+, GPT-4o/5, etc.)
  */
 export function isModelVisionCapable(
   modelOrId: AgentModel | string | null | undefined,
@@ -30,33 +82,90 @@ export function isModelVisionCapable(
   if (!modelOrId) return false;
 
   let model: AgentModel | undefined;
+  let rawId = "";
 
   if (typeof modelOrId === "string") {
+    rawId = modelOrId;
     model =
       modelsList.find((m) => m.id === modelOrId) ||
       modelsList.find((m) => m.id.endsWith(`/${modelOrId}`)) ||
-      modelsList.find((m) => m.name === modelOrId);
-    if (!model) return false;
+      modelsList.find((m) => m.name === modelOrId) ||
+      modelsList.find((m) => m.displayName === modelOrId);
   } else {
     model = modelOrId;
+    rawId = model.id;
   }
 
-  if (typeof model.supportsVision === "boolean") {
-    return model.supportsVision;
+  // 1. Explicit metadata checks
+  if (model) {
+    if (typeof model.supportsVision === "boolean") {
+      return model.supportsVision;
+    }
+
+    const meta = model.metadata as Record<string, unknown> | undefined;
+    if (meta) {
+      if (typeof meta.supportsVision === "boolean") {
+        return meta.supportsVision;
+      }
+      if (typeof meta.supportsAttachments === "boolean") {
+        return meta.supportsAttachments;
+      }
+      if (Array.isArray(meta.input)) {
+        if (meta.input.includes("image")) {
+          return true;
+        }
+        if (meta.input.length > 0 && !meta.input.includes("image")) {
+          return false;
+        }
+      } else if (typeof meta.input === "object" && meta.input !== null) {
+        const inp = meta.input as Record<string, unknown>;
+        if (inp.image === true) return true;
+        if (inp.image === false && inp.text === true) return false;
+      }
+
+      if (Array.isArray(meta.modalities)) {
+        if (meta.modalities.includes("image")) {
+          return true;
+        }
+      } else if (typeof meta.modalities === "object" && meta.modalities !== null) {
+        const mods = meta.modalities as Record<string, unknown>;
+        if (Array.isArray(mods.input)) {
+          if (mods.input.includes("image")) return true;
+          if (mods.input.length > 0 && !mods.input.includes("image")) return false;
+        }
+        if (mods.image === true) return true;
+      }
+    }
   }
 
-  const meta = model.metadata as Record<string, unknown> | undefined;
-  if (meta) {
-    if (typeof meta.supportsVision === "boolean") {
-      return meta.supportsVision;
+  // 2. Name & ID heuristics for providers without explicit capability flags
+  const metaObj = model?.metadata as Record<string, unknown> | undefined;
+  const targetString = [
+    rawId,
+    model?.id ?? "",
+    model?.displayName ?? "",
+    model?.name ?? "",
+    (metaObj?.family as string) ?? "",
+    (metaObj?.modelId as string) ?? "",
+    (metaObj?.providerName as string) ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!targetString.trim()) {
+    return false;
+  }
+
+  // Check known text-only patterns first
+  for (const pattern of TEXT_ONLY_MODEL_PATTERNS) {
+    if (pattern.test(targetString)) {
+      return false;
     }
-    if (typeof meta.supportsAttachments === "boolean") {
-      return meta.supportsAttachments;
-    }
-    if (Array.isArray(meta.input) && meta.input.includes("image")) {
-      return true;
-    }
-    if (Array.isArray(meta.modalities) && meta.modalities.includes("image")) {
+  }
+
+  // Check known vision patterns
+  for (const pattern of VISION_MODEL_PATTERNS) {
+    if (pattern.test(targetString)) {
       return true;
     }
   }
