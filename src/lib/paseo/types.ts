@@ -235,6 +235,8 @@ export interface AgentSlashCommand {
   kind?: "command" | "skill";
 }
 
+export type ActiveTurnBehavior = "interrupt" | "steer";
+
 // Timeline items
 export interface UserMessageTimelineItem {
   type: "user_message";
@@ -244,6 +246,7 @@ export interface UserMessageTimelineItem {
   timestamp?: string;
   attachments?: string[];
   images?: ImageAttachment[];
+  activeTurnBehavior?: ActiveTurnBehavior;
 }
 
 export interface AssistantMessageTimelineItem {

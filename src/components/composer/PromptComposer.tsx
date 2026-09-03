@@ -5,7 +5,9 @@ import { EffortSelector } from "./EffortSelector";
 import { SlashCommands, type SlashCommandItem } from "./SlashCommands";
 import { FileMentionPopup } from "./FileMentionPopup";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import type { ImageAttachment } from "../../lib/paseo/types";
+import { Button } from "../ui/button";
+import { ButtonGroup, ButtonGroupSeparator } from "../ui/button-group";
+import type { ImageAttachment, ActiveTurnBehavior } from "../../lib/paseo/types";
 import {
   isValidImageFile,
   fileToImageAttachment,
@@ -32,6 +34,8 @@ import {
   X,
   AlertCircle,
   Image as ImageIcon,
+  Navigation,
+  Zap,
 } from "lucide-react";
 
 function getModeIcon(modeId: string) {
@@ -68,6 +72,11 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     createAgentTab,
     activeAgentId,
   } = useWorkspace();
+
+  const isDebugRunning =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("debugRunning");
+  const effectiveIsTurnRunning = isTurnRunning || isDebugRunning;
 
   const [prompt, setPrompt] = useState(initialValue);
   const [slashFilter, setSlashFilter] = useState<string | null>(null);
@@ -222,9 +231,11 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     };
   }, [handleAddFiles]);
 
-  const handleSend = async () => {
+  const hasContent = Boolean(prompt.trim() || pendingImages.length > 0);
+
+  const handleSend = async (activeTurnBehavior?: ActiveTurnBehavior) => {
     const trimmed = prompt.trim();
-    if ((!trimmed && pendingImages.length === 0) || isTurnRunning) return;
+    if (!trimmed && pendingImages.length === 0) return;
 
     const imagesToSend = pendingImages.length > 0 ? [...pendingImages] : undefined;
     const textToSend = trimmed || (imagesToSend?.length ? "Describe this image" : "");
@@ -236,7 +247,9 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     setMentionFilter(null);
 
     try {
-      await sendMessage(textToSend, undefined, imagesToSend);
+      await sendMessage(textToSend, undefined, imagesToSend, {
+        activeTurnBehavior: effectiveIsTurnRunning ? (activeTurnBehavior || "steer") : undefined,
+      });
     } catch (err) {
       console.error("[PromptComposer] Send failed:", err);
     }
@@ -401,9 +414,25 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
       }
     }
 
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+    if (e.key === "Enter") {
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        if (effectiveIsTurnRunning) {
+          handleSend("interrupt");
+        } else {
+          handleSend();
+        }
+        return;
+      }
+      if (!e.shiftKey) {
+        e.preventDefault();
+        if (effectiveIsTurnRunning) {
+          handleSend("steer");
+        } else {
+          handleSend();
+        }
+        return;
+      }
     } else if (e.key === "Escape") {
       setSlashFilter(null);
       setMentionFilter(null);
@@ -572,7 +601,11 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Ask Paseo to write code, debug issues, or execute commands... (type / for commands, @ for files)"
+          placeholder={
+            effectiveIsTurnRunning
+              ? "Message active agent... (Enter to Steer, ⌘↵ to Interrupt)"
+              : "Ask Paseo to write code, debug issues, or execute commands... (type / for commands, @ for files)"
+          }
           rows={2}
           className="w-full resize-none bg-transparent border-0 p-1 text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden leading-relaxed max-h-56 touch-manipulation"
         />
@@ -705,65 +738,107 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
             <EffortSelector />
           </div>
 
-          {/* Right: Submit / Interrupt Action */}
+          {/* Right: Submit / Steer / Interrupt Action */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {isTurnRunning ? (
-              <button
-                type="button"
-                onClick={cancelTurn}
-                className="group relative h-7 w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
-                title="Stop generation"
-                aria-label="Stop generation"
-              >
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  {/* Subtle track circle */}
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="9"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="opacity-25"
-                  />
-                  {/* Rotating spinner arc inspired by lucide-animated loader-circle */}
-                  <g
-                    className="animate-spin"
-                    style={{ transformOrigin: "12px 12px" }}
+            {effectiveIsTurnRunning ? (
+              hasContent ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <ButtonGroup className="rounded-full overflow-hidden border border-border/80 shadow-xs bg-card">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSend("steer")}
+                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground cursor-pointer gap-1.5"
+                      title="Steer (Enter): inject message into active turn without stopping"
+                      aria-label="Steer active turn"
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      <span>Steer</span>
+                    </Button>
+                    <ButtonGroupSeparator className="bg-primary-foreground/20" />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSend("interrupt")}
+                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer gap-1.5 transition-colors"
+                      title="Interrupt (⌘↵ / Ctrl+Enter): stop current turn and start new turn"
+                      aria-label="Interrupt turn and start new turn"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Interrupt</span>
+                    </Button>
+                  </ButtonGroup>
+
+                  <button
+                    type="button"
+                    onClick={cancelTurn}
+                    className="h-7 w-7 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
+                    title="Stop generation without sending"
+                    aria-label="Stop generation"
                   >
-                    <path
-                      d="M21 12a9 9 0 1 1-6.219-8.56"
+                    <Square className="w-3 h-3 fill-current stroke-none" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={cancelTurn}
+                  className="group relative h-7 w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
+                  title="Stop generation"
+                  aria-label="Stop generation"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {/* Subtle track circle */}
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="9"
                       stroke="currentColor"
-                      strokeWidth="2.5"
+                      strokeWidth="2"
+                      className="opacity-25"
                     />
-                  </g>
-                  {/* Centered stop square with rounded corners */}
-                  <rect
-                    x="8.5"
-                    y="8.5"
-                    width="7"
-                    height="7"
-                    rx="1.5"
-                    fill="currentColor"
-                    stroke="none"
-                    className="transition-transform group-hover:scale-110"
-                    style={{ transformOrigin: "12px 12px" }}
-                  />
-                </svg>
-              </button>
+                    {/* Rotating spinner arc inspired by lucide-animated loader-circle */}
+                    <g
+                      className="animate-spin"
+                      style={{ transformOrigin: "12px 12px" }}
+                    >
+                      <path
+                        d="M21 12a9 9 0 1 1-6.219-8.56"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      />
+                    </g>
+                    {/* Centered stop square with rounded corners */}
+                    <rect
+                      x="8.5"
+                      y="8.5"
+                      width="7"
+                      height="7"
+                      rx="1.5"
+                      fill="currentColor"
+                      stroke="none"
+                      className="transition-transform group-hover:scale-110"
+                      style={{ transformOrigin: "12px 12px" }}
+                    />
+                  </svg>
+                </button>
+              )
             ) : (
               <button
                 type="button"
-                onClick={handleSend}
-                disabled={!prompt.trim() && pendingImages.length === 0}
+                onClick={() => handleSend()}
+                disabled={!hasContent}
                 className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 ${
-                  prompt.trim() || pendingImages.length > 0
+                  hasContent
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 active:scale-95"
                     : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
                 }`}

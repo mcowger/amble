@@ -21,6 +21,7 @@ import type {
   AgentSlashCommand,
   CreateWorktreeParams,
   CreateWorktreeResult,
+  ActiveTurnBehavior,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
@@ -110,7 +111,12 @@ interface WorkspaceContextType {
   setThinkingEffort: (effort: string) => void;
 
   isTurnRunning: boolean;
-  sendMessage: (text: string, attachments?: string[], images?: ImageAttachment[]) => Promise<void>;
+  sendMessage: (
+    text: string,
+    attachments?: string[],
+    images?: ImageAttachment[],
+    options?: { activeTurnBehavior?: ActiveTurnBehavior },
+  ) => Promise<void>;
   createSession: (initialPrompt?: string, targetWorkspaceId?: string, images?: ImageAttachment[]) => Promise<AgentSnapshot | null>;
   cancelTurn: () => Promise<void>;
 
@@ -650,12 +656,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               ) as UserMessageTimelineItem | undefined;
               const inStore = findMatchingAttachment(savedAttachments, uItem);
               const resolvedImages = uItem.images || inCurrent?.images || inStore?.images;
-              if (resolvedImages && resolvedImages.length > 0) {
-                item = {
-                  ...uItem,
-                  images: resolvedImages,
-                };
-              }
+              const resolvedBehavior = uItem.activeTurnBehavior || inCurrent?.activeTurnBehavior;
+              item = {
+                ...uItem,
+                ...(resolvedImages && resolvedImages.length > 0 ? { images: resolvedImages } : {}),
+                ...(resolvedBehavior ? { activeTurnBehavior: resolvedBehavior } : {}),
+              };
             }
 
             if (item.type === "compaction" && item.status === "completed") {
@@ -1209,6 +1215,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               const existing = next[idx] as UserMessageTimelineItem;
               next[idx] = {
                 ...item,
+                activeTurnBehavior: uItem.activeTurnBehavior || existing.activeTurnBehavior,
                 images: uItem.images || existing.images || inStore?.images,
               };
               return next;
@@ -1824,6 +1831,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     text: string,
     attachments?: string[],
     images?: ImageAttachment[],
+    options?: { activeTurnBehavior?: ActiveTurnBehavior },
   ) => {
     let targetAgentId = activeAgentId;
 
@@ -1854,6 +1862,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       clientMessageId: messageId,
       attachments,
       images,
+      activeTurnBehavior: options?.activeTurnBehavior,
     };
     timelineRevisionRef.current += 1;
     setTimeline((prev) => [...prev, userItem]);
@@ -1870,6 +1879,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         attachments,
         images,
         messageId,
+        activeTurnBehavior: options?.activeTurnBehavior,
       });
     } catch (err) {
       setIsTurnRunning(false);

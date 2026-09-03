@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, User, ZoomIn } from "lucide-react";
+import { Copy, Check, User, ZoomIn, Navigation, Zap } from "lucide-react";
 import { formatTime } from "../../lib/utils";
 import type { UserMessageTimelineItem, ImageAttachment } from "../../lib/paseo/types";
 import {
@@ -33,6 +33,24 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
             <User className="w-3 h-3" />
           </div>
           <span className="text-xs font-semibold text-foreground">You</span>
+          {item.activeTurnBehavior === "steer" && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+              title="Message injected into ongoing turn"
+            >
+              <Navigation className="w-2.5 h-2.5" />
+              Steered
+            </span>
+          )}
+          {item.activeTurnBehavior === "interrupt" && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+              title="Turn interrupted and restarted with this message"
+            >
+              <Zap className="w-2.5 h-2.5" />
+              Interrupted
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

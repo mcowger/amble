@@ -23,6 +23,7 @@ import type {
   AgentSlashCommand,
   CreateWorktreeParams,
   CreateWorktreeResult,
+  ActiveTurnBehavior,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -545,12 +546,14 @@ export class PaseoClient {
     attachments?: string[];
     images?: Array<{ data: string; mimeType: string }>;
     messageId?: string;
+    activeTurnBehavior?: ActiveTurnBehavior;
   }): Promise<{ accepted: boolean }> {
     await this.setAgentTimelineSubscription([params.agentId]).catch(() => {});
     await this.daemon.sendAgentMessage(params.agentId, params.text, {
       attachments: params.attachments as any,
       images: params.images,
       messageId: params.messageId,
+      activeTurnBehavior: params.activeTurnBehavior,
     });
     return { accepted: true };
   }
