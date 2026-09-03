@@ -22,6 +22,12 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 import { formatRelativePath, stripCwdFromText } from "../../lib/utils";
 import { isSubagentToolCall } from "../../lib/subagent-helpers";
 import type { ToolCallTimelineItem } from "../../lib/paseo/types";
+import {
+  extractFilePathFromDiff,
+  isDiffText,
+  resolveDiffStats,
+  type DiffStats,
+} from "./diff-utils";
 
 function formatContent(value: unknown): string {
   if (value === undefined || value === null) return "";
@@ -62,6 +68,51 @@ interface ResolvedInput {
   diffText?: string;
   oldString?: string;
   newString?: string;
+  diffStats?: DiffStats;
+}
+
+const getNumericField = (source: unknown, keys: string[]): number | undefined => {
+  if (!source || typeof source !== "object") return undefined;
+  for (const key of keys) {
+    const value = (source as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+};
+
+function getExplicitDiffStats(
+  item: ToolCallTimelineItem,
+  detail: Record<string, any>,
+  meta: Record<string, any>,
+  input: unknown,
+  output: unknown,
+): Partial<DiffStats> {
+  const sources = [
+    detail,
+    meta,
+    meta.filediff,
+    meta.fileDiff,
+    meta.diffStats,
+    detail.stats,
+    detail.diffStats,
+    meta.stats,
+    input,
+    output,
+    item,
+  ];
+  const additionKeys = ["additions", "insertions", "added", "linesAdded"];
+  const deletionKeys = ["deletions", "removed", "linesRemoved"];
+
+  return {
+    additions: sources.reduce<number | undefined>(
+      (value, source) => value ?? getNumericField(source, additionKeys),
+      undefined,
+    ),
+    deletions: sources.reduce<number | undefined>(
+      (value, source) => value ?? getNumericField(source, deletionKeys),
+      undefined,
+    ),
+  };
 }
 
 function resolveToolInput(
@@ -72,6 +123,7 @@ function resolveToolInput(
   const detail = (item.detail || {}) as Record<string, any>;
   const meta = (item.metadata || {}) as Record<string, any>;
   const rawName = (item.name || item.tool || "").toLowerCase();
+  const input = item.input as any;
 
   // 1. Shell / Bash
   if (detail.type === "shell" || rawName === "bash" || rawName === "shell") {
@@ -88,7 +140,8 @@ function resolveToolInput(
   if (detail.type === "read" || rawName === "read") {
     const rawFp =
       detail.filePath ||
-      (item.input as any)?.filePath ||
+      input?.filePath ||
+      input?.file_path ||
       item.filePath ||
       meta.display?.path;
     const fp = formatRelativePath(rawFp, cwd);
@@ -108,18 +161,28 @@ function resolveToolInput(
   ) {
     const rawFp =
       detail.filePath ||
-      (item.input as any)?.filePath ||
+      input?.filePath ||
+      input?.file_path ||
       item.filePath ||
       meta.filePath ||
       meta.filediff?.file;
-    const fp = formatRelativePath(rawFp, cwd);
     const diffText =
-      detail.unifiedDiff ||
-      meta.diff ||
-      meta.filediff?.patch ||
-      item.diff;
-    const oldString = detail.oldString || (item.input as any)?.oldString;
-    const newString = detail.newString || (item.input as any)?.newString;
+      detail.unifiedDiff ??
+      detail.patch ??
+      detail.patchText ??
+      meta.diff ??
+      meta.filediff?.patch ??
+      meta.patchText ??
+      item.diff ??
+      input?.unifiedDiff ??
+      input?.diff ??
+      input?.patch ??
+      input?.patchText ??
+      (typeof item.input === "string" ? item.input : undefined);
+    const fp = formatRelativePath(rawFp || extractFilePathFromDiff(diffText), cwd);
+    const oldString = detail.oldString ?? detail.old_string ?? input?.oldString ?? input?.old_string;
+    const newString = detail.newString ?? detail.new_string ?? input?.newString ?? input?.new_string;
+    const explicitStats = getExplicitDiffStats(item, detail, meta, input, item.output);
     return {
       type: "edit",
       content: fp,
@@ -127,18 +190,29 @@ function resolveToolInput(
       diffText,
       oldString,
       newString,
+      diffStats: resolveDiffStats({
+        diffText,
+        oldString,
+        newString,
+        ...explicitStats,
+      }),
     };
   }
 
   // 4. Write
-  if (detail.type === "write" || rawName === "write") {
-    const rawFp = detail.filePath || (item.input as any)?.filePath || item.filePath;
+  if (detail.type === "write" || rawName.includes("write")) {
+    const rawFp = detail.filePath || input?.filePath || input?.file_path || input?.path || item.filePath;
     const fp = formatRelativePath(rawFp, cwd);
-    const writeContent = detail.content || (item.input as any)?.content;
+    const writeContent = detail.content ?? input?.content;
+    const explicitStats = getExplicitDiffStats(item, detail, meta, input, item.output);
     return {
       type: "write",
-      content: fp ? (writeContent ? `${fp}\n\n${writeContent}` : fp) : writeContent,
+      content: fp ? (writeContent !== undefined ? `${fp}\n\n${writeContent}` : fp) : writeContent,
       filePath: fp,
+      diffStats: resolveDiffStats({
+        newString: typeof writeContent === "string" ? writeContent : undefined,
+        ...explicitStats,
+      }),
     };
   }
 
@@ -248,7 +322,7 @@ function resolveToolInput(
   }
 
   // Generic fallback
-  const input =
+  const genericInput =
     detail.input !== undefined
       ? detail.input
       : (item.input ??
@@ -256,13 +330,15 @@ function resolveToolInput(
         (item as any).arguments ??
         (item as any).parameters ??
         (item as any).params);
-  return { type: detail.type || "unknown", content: input };
+  return { type: detail.type || "unknown", content: genericInput };
 }
 
 interface ResolvedOutput {
   content: string | undefined;
   exitCode?: number | null;
   isDiff?: boolean;
+  diffText?: string;
+  diffStats?: DiffStats;
 }
 
 function resolveToolOutput(item: ToolCallTimelineItem, cwd?: string): ResolvedOutput {
@@ -296,20 +372,28 @@ function resolveToolOutput(item: ToolCallTimelineItem, cwd?: string): ResolvedOu
     rawName.includes("patch") ||
     rawName.includes("diff")
   ) {
-    const diff =
-      detail.unifiedDiff ||
-      meta.diff ||
-      meta.filediff?.patch ||
-      item.diff ||
-      item.output;
+    const explicitDiff =
+      detail.unifiedDiff ??
+      detail.patch ??
+      meta.diff ??
+      meta.filediff?.patch ??
+      item.diff;
+    const outputDiff = isDiffText(item.output) ? item.output : undefined;
+    const diff = explicitDiff ?? outputDiff ?? item.output;
+    const diffText =
+      typeof diff === "string" && (explicitDiff !== undefined || isDiffText(diff))
+        ? stripCwdFromText(diff, cwd)
+        : undefined;
     return {
       content: typeof diff === "string" ? stripCwdFromText(diff, cwd) : diff,
-      isDiff: true,
+      isDiff: diffText !== undefined,
+      diffText,
+      diffStats: diffText !== undefined ? resolveDiffStats({ diffText }) : undefined,
     };
   }
 
   // 4. Write
-  if (detail.type === "write" || rawName === "write") {
+  if (detail.type === "write" || rawName.includes("write")) {
     const content =
       detail.content ||
       meta.content ||
@@ -394,22 +478,29 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
   const formattedInput = formatContent(inputInfo.content);
   const formattedOutput = outputInfo.content ? formatContent(outputInfo.content) : undefined;
 
-  const isEditTool =
+  const isDiffTool =
     inputInfo.type === "edit" ||
     toolName.toLowerCase().includes("edit") ||
     toolName.toLowerCase().includes("patch") ||
+    toolName.toLowerCase().includes("diff") ||
     inputInfo.diffText !== undefined ||
-    inputInfo.oldString !== undefined;
+    inputInfo.oldString !== undefined ||
+    inputInfo.newString !== undefined;
 
-  const hasDiff = Boolean(
-    inputInfo.diffText ||
-    (formattedOutput && formattedOutput.startsWith("Index:"))
-  );
-  const showDiff = isEditTool && hasDiff;
+  const isFileModification =
+    isDiffTool || inputInfo.type === "write" || toolName.toLowerCase().includes("write");
+
+  const hasDiff =
+    inputInfo.diffText !== undefined ||
+    outputInfo.diffText !== undefined ||
+    inputInfo.oldString !== undefined ||
+    inputInfo.newString !== undefined;
+  const showDiff = isDiffTool && hasDiff;
+  const diffStats = inputInfo.diffStats || outputInfo.diffStats;
 
   const showInput =
     Boolean(formattedInput) &&
-    (!isEditTool || (!inputInfo.diffText && !inputInfo.oldString));
+    (!isDiffTool || (!inputInfo.diffText && !inputInfo.oldString && !inputInfo.newString));
 
   const getToolIcon = () => {
     const t = toolName.toLowerCase();
@@ -520,6 +611,16 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0 ml-2">
+          {isFileModification && diffStats && (diffStats.additions > 0 || diffStats.deletions > 0) ? (
+            <div className="flex items-center gap-1.5 text-[11px] font-mono font-medium" title="File changes">
+              {diffStats.additions > 0 ? (
+                <span className="text-emerald-600 dark:text-emerald-400">+{diffStats.additions}</span>
+              ) : null}
+              {diffStats.deletions > 0 ? (
+                <span className="text-rose-600 dark:text-rose-400">-{diffStats.deletions}</span>
+              ) : null}
+            </div>
+          ) : null}
           {getStatusIcon()}
           {isExpanded ? (
             <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
@@ -536,9 +637,10 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
           {showDiff ? (
             <DiffViewer
               filePath={inputInfo.filePath}
-              diffText={inputInfo.diffText || formattedOutput}
+              diffText={inputInfo.diffText || outputInfo.diffText}
               oldString={inputInfo.oldString}
               newString={inputInfo.newString}
+              stats={diffStats}
             />
           ) : null}
 
@@ -614,4 +716,3 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
     </div>
   );
 }
-
