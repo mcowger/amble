@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { usePaseo } from "../../context/PaseoContext";
 import { useTheme } from "../../context/ThemeContext";
 import { cn } from "../../lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import { ContextUsagePill } from "./ContextUsagePill";
 import { SessionTokenDetailPill } from "./SessionTokenDetailPill";
+import { ProjectIcon } from "./ProjectIcon";
+import { resolveActiveProjectWorktree } from "./project-worktree-utils";
 import {
   Settings,
   Sun,
@@ -16,6 +19,8 @@ import {
   Check,
   LayoutList,
   ListCollapse,
+  GitFork,
+  ChevronRight,
 } from "lucide-react";
 
 interface TopRailProps {
@@ -26,6 +31,10 @@ interface TopRailProps {
 export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
   const {
     activeAgent,
+    activeWorkspace,
+    projects,
+    workspaces,
+    setActiveWorkspaceId,
     models,
     selectedModel,
     selectedMode,
@@ -36,10 +45,44 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
     setSummaryMode,
   } = useWorkspace();
 
+  const { client } = usePaseo();
   const { isDark, setTheme } = useTheme();
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
+
+  const {
+    project,
+    projectName,
+    isWorktree,
+    worktreeLabel,
+    worktreeTooltip,
+    directWorkspace,
+    worktreeWorkspace,
+  } = useMemo(
+    () =>
+      resolveActiveProjectWorktree({
+        activeAgent,
+        activeWorkspace,
+        projects,
+        workspaces,
+      }),
+    [activeAgent, activeWorkspace, projects, workspaces],
+  );
+
+  const handleSelectProject = () => {
+    if (directWorkspace) {
+      setActiveWorkspaceId(directWorkspace.id);
+    } else if (project?.id) {
+      setActiveWorkspaceId(project.id);
+    }
+  };
+
+  const handleSelectWorktree = () => {
+    if (worktreeWorkspace?.id) {
+      setActiveWorkspaceId(worktreeWorkspace.id);
+    }
+  };
 
   const handleStartRename = () => {
     if (!activeAgent) return;
@@ -58,8 +101,8 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
 
   return (
     <header className="h-12 border-b border-border bg-sidebar/70 backdrop-blur-md px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden">
-      {/* Left: Mobile Menu & Active Session Title */}
-      <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden pr-2">
+      {/* Left: Mobile Menu, Head Entry (Project & Worktree), & Active Session Title */}
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-hidden pr-2">
         <button
           onClick={onToggleSidebar}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer md:hidden shrink-0"
@@ -67,6 +110,40 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
         >
           <Menu className="w-4 h-4" />
         </button>
+
+        {/* Head entry: Project */}
+        {project && (
+          <button
+            type="button"
+            onClick={handleSelectProject}
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer shrink-0 max-w-[90px] sm:max-w-[130px]"
+            title={`Project: ${projectName || project.name}`}
+          >
+            <ProjectIcon project={project} client={client} />
+            <span className="truncate">{projectName || project.name}</span>
+          </button>
+        )}
+
+        {/* Head entry: Worktree (if relevant) */}
+        {project && isWorktree && worktreeLabel && (
+          <>
+            <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 select-none" />
+            <button
+              type="button"
+              onClick={handleSelectWorktree}
+              className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer font-mono shrink-0 max-w-[120px] sm:max-w-[160px]"
+              title={worktreeTooltip || `Worktree: ${worktreeLabel}`}
+            >
+              <GitFork className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{worktreeLabel}</span>
+            </button>
+          </>
+        )}
+
+        {/* Breadcrumb Separator before Session Title */}
+        {project && (
+          <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 select-none" />
+        )}
 
         {/* Active Session Title (Editable) */}
         {isEditingTitle ? (
@@ -125,8 +202,8 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
         {/* Session Token Detail Pill (Uploaded, Downloaded, Cache Hit Rate) */}
         <SessionTokenDetailPill />
 
-        {/* Model & Mode Indicators for Desktop */}
-        <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 border border-border/30 px-2.5 py-1 rounded-full">
+        {/* Model & Mode Indicators for Large Desktop */}
+        <div className="hidden 2xl:flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 border border-border/30 px-2.5 py-1 rounded-full">
           <Sparkles className="w-3 h-3 text-amber-500" />
           <span className="font-medium text-foreground">
             {models.find((m) => m.id === selectedModel)?.displayName ||
