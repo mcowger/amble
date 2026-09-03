@@ -58,14 +58,12 @@ export function ModelSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="h-7 flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
+          className="h-7 inline-flex min-w-0 max-w-[260px] sm:max-w-[320px] shrink-0 items-center gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
           title={`Select Model: ${current.displayName || current.name}`}
         >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-left">{current.displayName || current.name}</span>
-          </div>
-          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0 ml-1" />
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="min-w-0 truncate text-left">{current.displayName || current.name}</span>
+          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>
 
@@ -97,7 +95,7 @@ export function ModelSelector() {
         </div>
 
         {/* Model List in Shadcn ScrollArea */}
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="max-h-72" viewportClassName="max-h-72">
           <div className="space-y-1 pt-1 pr-2">
             {filteredModels.length === 0 ? (
               <div className="p-4 text-center text-xs text-muted-foreground">
