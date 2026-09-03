@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Copy, Check, User, ZoomIn, Navigation, Zap } from "lucide-react";
+import { Copy, Check, User, ZoomIn, Navigation, Zap, Clock } from "lucide-react";
 import { formatTime } from "../../lib/utils";
 import type { UserMessageTimelineItem, ImageAttachment } from "../../lib/paseo/types";
 import {
@@ -49,6 +49,15 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
             >
               <Zap className="w-2.5 h-2.5" />
               Interrupted
+            </span>
+          )}
+          {item.activeTurnBehavior === "followup" && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+              title="Message sent after previous turn finished"
+            >
+              <Clock className="w-2.5 h-2.5" />
+              Follow-up
             </span>
           )}
         </div>
