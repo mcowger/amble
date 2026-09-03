@@ -277,6 +277,8 @@ export interface ToolCallTimelineItem {
   elapsedMs?: number;
   diff?: string;
   filePath?: string;
+  additions?: number;
+  deletions?: number;
 }
 
 export interface TodoItem {

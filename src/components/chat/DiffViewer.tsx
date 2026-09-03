@@ -2,15 +2,17 @@ import React, { useState } from "react";
 import { FileCode, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { formatRelativePath } from "../../lib/utils";
+import { countDiffStats, type DiffStats } from "./diff-utils";
 
 interface DiffViewerProps {
   filePath?: string;
   diffText?: string;
   oldString?: string;
   newString?: string;
+  stats?: DiffStats;
 }
 
-export function DiffViewer({ filePath, diffText, oldString, newString }: DiffViewerProps) {
+export function DiffViewer({ filePath, diffText, oldString, newString, stats }: DiffViewerProps) {
   const { activeWorkspace, activeAgent } = useWorkspace();
   const cwd = activeAgent?.cwd || activeAgent?.project?.checkout?.cwd || activeWorkspace?.path;
   const displayPath = formatRelativePath(filePath, cwd) || "Diff";
@@ -48,8 +50,12 @@ export function DiffViewer({ filePath, diffText, oldString, newString }: DiffVie
   };
 
   const lines = parseDiffLines();
-  const additions = lines.filter((l) => l.type === "add").length;
-  const deletions = lines.filter((l) => l.type === "del").length;
+  const countedStats = diffText ? countDiffStats(diffText) : {
+    additions: lines.filter((l) => l.type === "add").length,
+    deletions: lines.filter((l) => l.type === "del").length,
+  };
+  const additions = stats?.additions ?? countedStats.additions;
+  const deletions = stats?.deletions ?? countedStats.deletions;
 
   const handleCopy = () => {
     const content = diffText || `${oldString}\n${newString}`;
