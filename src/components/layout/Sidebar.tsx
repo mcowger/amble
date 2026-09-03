@@ -6,6 +6,13 @@ import type { ProjectItem, WorkspaceItem, AgentSnapshot } from "../../lib/paseo/
 import type { PaseoClient } from "../../lib/paseo/client";
 import { cn } from "../../lib/utils";
 import {
+  isProjectEmpty,
+  resolveProjectCollapsed,
+  resolveWorktreeCollapsed,
+  parseStoredCollapseState,
+  toggleCollapseRecord,
+} from "./sidebar-collapse-utils";
+import {
   Folder,
   GitFork,
   GitBranch,
@@ -511,53 +518,41 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
     createSession,
   } = useWorkspace();
 
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => {
+  const [projectCollapseOverrides, setProjectCollapseOverrides] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("amble-collapsed-projects");
-        if (saved) return new Set(JSON.parse(saved));
-      } catch {}
+      return parseStoredCollapseState(localStorage.getItem("amble-collapsed-projects"));
     }
-    return new Set();
+    return {};
   });
 
-  const [collapsedWorktrees, setCollapsedWorktrees] = useState<Set<string>>(() => {
+  const [worktreeCollapseOverrides, setWorktreeCollapseOverrides] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("amble-collapsed-worktrees");
-        if (saved) return new Set(JSON.parse(saved));
-      } catch {}
+      return parseStoredCollapseState(localStorage.getItem("amble-collapsed-worktrees"));
     }
-    return new Set();
+    return {};
   });
 
   const [targetWorktreeProject, setTargetWorktreeProject] = useState<ProjectItem | null>(null);
 
-  const toggleProjectCollapse = (projectId: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
+  const toggleProjectCollapse = (projectId: string, isCurrentlyCollapsed: boolean) => {
+    setProjectCollapseOverrides((prev) => {
+      const next = toggleCollapseRecord(prev, projectId, isCurrentlyCollapsed);
       if (typeof window !== "undefined") {
-        localStorage.setItem("amble-collapsed-projects", JSON.stringify(Array.from(next)));
+        try {
+          localStorage.setItem("amble-collapsed-projects", JSON.stringify(next));
+        } catch {}
       }
       return next;
     });
   };
 
-  const toggleWorktreeCollapse = (worktreeKey: string) => {
-    setCollapsedWorktrees((prev) => {
-      const next = new Set(prev);
-      if (next.has(worktreeKey)) {
-        next.delete(worktreeKey);
-      } else {
-        next.add(worktreeKey);
-      }
+  const toggleWorktreeCollapse = (worktreeKey: string, isCurrentlyCollapsed: boolean) => {
+    setWorktreeCollapseOverrides((prev) => {
+      const next = toggleCollapseRecord(prev, worktreeKey, isCurrentlyCollapsed);
       if (typeof window !== "undefined") {
-        localStorage.setItem("amble-collapsed-worktrees", JSON.stringify(Array.from(next)));
+        try {
+          localStorage.setItem("amble-collapsed-worktrees", JSON.stringify(next));
+        } catch {}
       }
       return next;
     });
@@ -624,26 +619,45 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
     if (!activeAgentId) return;
     for (const item of projectTree) {
       if (item.directSessions.some((s) => s.id === activeAgentId)) {
-        if (collapsedProjects.has(item.project.id)) {
-          setCollapsedProjects((prev) => {
-            const next = new Set(prev);
-            next.delete(item.project.id);
-            return next;
-          });
-        }
+        const isEmpty = isProjectEmpty(item.directSessions, item.worktrees);
+        setProjectCollapseOverrides((prev) => {
+          const isCollapsed = resolveProjectCollapsed(item.project.id, prev, isEmpty);
+          if (!isCollapsed) return prev;
+          const next = { ...prev, [item.project.id]: false };
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("amble-collapsed-projects", JSON.stringify(next));
+            } catch {}
+          }
+          return next;
+        });
         break;
       }
       for (const wt of item.worktrees) {
         if (wt.sessions.some((s) => s.id === activeAgentId)) {
           const wtKey = `${item.project.id}:${wt.branch}`;
-          setCollapsedProjects((prev) => {
-            const next = new Set(prev);
-            next.delete(item.project.id);
+          const isEmpty = isProjectEmpty(item.directSessions, item.worktrees);
+          setProjectCollapseOverrides((prev) => {
+            const isProjCollapsed = resolveProjectCollapsed(item.project.id, prev, isEmpty);
+            if (!isProjCollapsed) return prev;
+            const next = { ...prev, [item.project.id]: false };
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("amble-collapsed-projects", JSON.stringify(next));
+              } catch {}
+            }
             return next;
           });
-          setCollapsedWorktrees((prev) => {
-            const next = new Set(prev);
-            next.delete(wtKey);
+          setWorktreeCollapseOverrides((prev) => {
+            const hasChildren = wt.sessions.length > 0;
+            const isWtCollapsed = resolveWorktreeCollapsed(wtKey, prev, hasChildren);
+            if (!isWtCollapsed) return prev;
+            const next = { ...prev, [wtKey]: false };
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("amble-collapsed-worktrees", JSON.stringify(next));
+              } catch {}
+            }
             return next;
           });
           break;
@@ -710,14 +724,19 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
           {projectTree.map(({ project, directWorkspace, directSessions, worktrees }) => {
             const hasChildren =
               directSessions.length > 0 || worktrees.length > 0;
-            const isProjectCollapsed = collapsedProjects.has(project.id);
+            const isEmpty = isProjectEmpty(directSessions, worktrees);
+            const isProjectCollapsed = resolveProjectCollapsed(
+              project.id,
+              projectCollapseOverrides,
+              isEmpty,
+            );
 
             return (
               <div key={project.id || project.name} className="space-y-0.5">
                 {/* Project Header */}
                 <div
                   onClick={() => {
-                    toggleProjectCollapse(project.id);
+                    toggleProjectCollapse(project.id, isProjectCollapsed);
                     handleSelectProject(project, directWorkspace);
                   }}
                   className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground cursor-pointer transition-colors"
@@ -727,7 +746,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleProjectCollapse(project.id);
+                        toggleProjectCollapse(project.id, isProjectCollapsed);
                       }}
                       className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
                       title={isProjectCollapsed ? "Expand project" : "Collapse project"}
@@ -820,7 +839,11 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                     {worktrees.map((wt) => {
                       const wtKey = `${project.id}:${wt.branch}`;
                       const hasWorktreeChildren = wt.sessions.length > 0;
-                      const isWorktreeCollapsed = hasWorktreeChildren && collapsedWorktrees.has(wtKey);
+                      const isWorktreeCollapsed = resolveWorktreeCollapsed(
+                        wtKey,
+                        worktreeCollapseOverrides,
+                        hasWorktreeChildren,
+                      );
 
                       return (
                         <div key={wtKey} className="space-y-0.5">
@@ -828,7 +851,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                           <div
                             onClick={() => {
                               if (hasWorktreeChildren) {
-                                toggleWorktreeCollapse(wtKey);
+                                toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
                               }
                             }}
                             className={`group pl-5 pr-1 py-0.5 flex items-center justify-between text-muted-foreground hover:text-foreground rounded hover:bg-accent/30 transition-colors ${
@@ -841,7 +864,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    toggleWorktreeCollapse(wtKey);
+                                    toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
                                   }}
                                   className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
                                   title={isWorktreeCollapsed ? "Expand worktree" : "Collapse worktree"}
@@ -958,9 +981,13 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
         onClose={() => setTargetWorktreeProject(null)}
         project={targetWorktreeProject}
         onCreated={(proj) => {
-          setCollapsedProjects((prev) => {
-            const next = new Set(prev);
-            next.delete(proj.id);
+          setProjectCollapseOverrides((prev) => {
+            const next = { ...prev, [proj.id]: false };
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("amble-collapsed-projects", JSON.stringify(next));
+              } catch {}
+            }
             return next;
           });
         }}
