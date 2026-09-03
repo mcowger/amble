@@ -12,6 +12,7 @@ import {
   parseStoredCollapseState,
   toggleCollapseRecord,
 } from "./sidebar-collapse-utils";
+import { ProjectIcon } from "./ProjectIcon";
 import {
   Folder,
   GitFork,
@@ -59,47 +60,6 @@ function formatElapsed(timestamp?: string | number): string {
   if (diffHours < 24) return `${diffHours}h`;
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}d`;
-}
-
-function ProjectIcon({ project, client }: { project: ProjectItem; client: PaseoClient }) {
-  const [iconUri, setIconUri] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadIcon = async () => {
-      try {
-        let res: { icon: { mimeType: string; data: string } | null } | null = null;
-        if (project.rootPath) {
-          res = await client.requestProjectIcon(project.rootPath).catch(() => null);
-        }
-        if (!res?.icon && project.id) {
-          res = await client.getProjectIcon(project.id).catch(() => null);
-        }
-        if (!cancelled && res?.icon) {
-          setIconUri(`data:${res.icon.mimeType};base64,${res.icon.data}`);
-        }
-      } catch {}
-    };
-
-    loadIcon();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, project.rootPath, client]);
-
-  if (iconUri) {
-    return (
-      <img
-        src={iconUri}
-        alt=""
-        className="w-3.5 h-3.5 object-contain shrink-0 rounded-xs"
-      />
-    );
-  }
-
-  return <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
 }
 
 function BranchCombobox({
