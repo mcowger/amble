@@ -44,6 +44,29 @@ describe("PaseoClient activeTurnBehavior", () => {
     });
   });
 
+  test("handles activeTurnBehavior: 'followup' by waiting for finish then sending without activeTurnBehavior", async () => {
+    const client = new PaseoClient({ url: "ws://127.0.0.1:9999/ws" });
+    const sendAgentMessageMock = mock(async (_agentId: string, _text: string, _options?: any) => {});
+    const waitForFinishMock = mock(async (_agentId: string) => ({ status: "completed" }));
+    (client as any).daemon.sendAgentMessage = sendAgentMessageMock;
+    (client as any).daemon.waitForFinish = waitForFinishMock;
+    (client as any).setAgentTimelineSubscription = mock(async () => {});
+
+    await client.sendAgentMessage({
+      agentId: "agent-123",
+      text: "Run tests after you finish",
+      activeTurnBehavior: "followup",
+    });
+
+    expect(waitForFinishMock).toHaveBeenCalledTimes(1);
+    expect(waitForFinishMock.mock.calls[0]![0]).toBe("agent-123");
+    expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
+    const args = sendAgentMessageMock.mock.calls[0]!;
+    expect(args[0]).toBe("agent-123");
+    expect(args[1]).toBe("Run tests after you finish");
+    expect(args[2]?.activeTurnBehavior).toBeUndefined();
+  });
+
   test("handles undefined activeTurnBehavior", async () => {
     const client = new PaseoClient({ url: "ws://127.0.0.1:9999/ws" });
     const sendAgentMessageMock = mock(async (_agentId: string, _text: string, _options?: any) => {});

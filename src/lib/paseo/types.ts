@@ -253,7 +253,16 @@ export interface AgentSlashCommand {
   kind?: "command" | "skill";
 }
 
-export type ActiveTurnBehavior = "interrupt" | "steer";
+export type ActiveTurnBehavior = "interrupt" | "steer" | "followup";
+
+export interface QueuedFollowup {
+  id: string;
+  agentId: string;
+  text: string;
+  attachments?: string[];
+  images?: ImageAttachment[];
+  timestamp: string;
+}
 
 // Timeline items
 export interface UserMessageTimelineItem {

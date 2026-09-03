@@ -704,6 +704,17 @@ export class PaseoClient {
     activeTurnBehavior?: ActiveTurnBehavior;
   }): Promise<{ accepted: boolean }> {
     await this.setAgentTimelineSubscription([params.agentId]).catch(() => {});
+    if (params.activeTurnBehavior === "followup") {
+      if (typeof (this.daemon as any).waitForFinish === "function") {
+        await (this.daemon as any).waitForFinish(params.agentId).catch(() => {});
+      }
+      await this.daemon.sendAgentMessage(params.agentId, params.text, {
+        attachments: params.attachments as any,
+        images: params.images,
+        messageId: params.messageId,
+      });
+      return { accepted: true };
+    }
     await this.daemon.sendAgentMessage(params.agentId, params.text, {
       attachments: params.attachments as any,
       images: params.images,

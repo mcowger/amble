@@ -7,7 +7,7 @@ import { FileMentionPopup } from "./FileMentionPopup";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Button } from "../ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "../ui/button-group";
-import type { ImageAttachment, ActiveTurnBehavior } from "../../lib/paseo/types";
+import type { ImageAttachment, ActiveTurnBehavior, QueuedFollowup } from "../../lib/paseo/types";
 import {
   isValidImageFile,
   fileToImageAttachment,
@@ -36,6 +36,7 @@ import {
   Image as ImageIcon,
   Navigation,
   Zap,
+  Clock,
 } from "lucide-react";
 
 function getModeIcon(modeId: string) {
@@ -71,12 +72,28 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     archiveAgentSession,
     createAgentTab,
     activeAgentId,
+    queuedFollowups,
+    cancelQueuedFollowup,
   } = useWorkspace();
 
   const isDebugRunning =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).has("debugRunning");
   const effectiveIsTurnRunning = isTurnRunning || isDebugRunning;
+
+  const activeAgentQueuedFollowups = (queuedFollowups || []).filter(
+    (q) => !activeAgentId || q.agentId === activeAgentId,
+  );
+
+  const handleCancelFollowup = (q: QueuedFollowup) => {
+    cancelQueuedFollowup(q.id);
+    if (!prompt.trim()) {
+      setPrompt(q.text);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
 
   const [prompt, setPrompt] = useState(initialValue);
   const [slashFilter, setSlashFilter] = useState<string | null>(null);
@@ -400,6 +417,15 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
 
     if (e.key === "Enter") {
+      if (e.altKey) {
+        e.preventDefault();
+        if (effectiveIsTurnRunning) {
+          handleSend("followup");
+        } else {
+          handleSend();
+        }
+        return;
+      }
       if (e.metaKey || e.ctrlKey) {
         e.preventDefault();
         if (effectiveIsTurnRunning) {
@@ -533,6 +559,37 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           </div>
         )}
 
+        {/* Queued Follow-ups Preview Strip */}
+        {activeAgentQueuedFollowups.length > 0 && (
+          <div className="space-y-1.5 p-1 pt-0">
+            {activeAgentQueuedFollowups.map((q) => (
+              <div
+                key={q.id}
+                className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border border-blue-500/20 bg-blue-500/5 text-xs text-card-foreground shadow-xs"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Clock className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                  <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 shrink-0">
+                    Follow-up queued:
+                  </span>
+                  <span className="truncate text-muted-foreground font-normal">
+                    {q.text}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCancelFollowup(q)}
+                  className="p-0.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors shrink-0"
+                  title="Cancel follow-up"
+                  aria-label="Cancel follow-up"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Pending Image Attachments Preview Strip */}
         {pendingImages.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 p-1 pt-0">
@@ -578,7 +635,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           onPaste={handlePaste}
           placeholder={
             effectiveIsTurnRunning
-              ? "Message active agent... (Enter to Steer, ⌘↵ to Interrupt)"
+              ? "Message active agent... (Enter to Steer, ⌘↵ to Interrupt, ⌥↵ to Follow-up)"
               : "Ask Paseo to write code, debug issues, or execute commands... (type / for commands, @ for files)"
           }
           rows={2}
@@ -743,6 +800,19 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                     >
                       <Zap className="w-3.5 h-3.5" />
                       <span>Interrupt</span>
+                    </Button>
+                    <ButtonGroupSeparator className="bg-border" />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleSend("followup")}
+                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-blue-500/15 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer gap-1.5 transition-colors"
+                      title="Follow-up (⌥↵ / Alt+Enter): send message after agent finishes current turn"
+                      aria-label="Follow-up after agent finishes"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Follow-up</span>
                     </Button>
                   </ButtonGroup>
 

@@ -22,6 +22,7 @@ import type {
   CreateWorktreeParams,
   CreateWorktreeResult,
   ActiveTurnBehavior,
+  QueuedFollowup,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
@@ -137,10 +138,12 @@ interface WorkspaceContextType {
     text: string,
     attachments?: string[],
     images?: ImageAttachment[],
-    options?: { activeTurnBehavior?: ActiveTurnBehavior },
+    options?: { activeTurnBehavior?: ActiveTurnBehavior; agentId?: string },
   ) => Promise<void>;
   createSession: (initialPrompt?: string, targetWorkspaceId?: string, images?: ImageAttachment[]) => Promise<AgentSnapshot | null>;
   cancelTurn: () => Promise<void>;
+  queuedFollowups: QueuedFollowup[];
+  cancelQueuedFollowup: (id: string) => void;
 
   // Slash Commands
   commands: AgentSlashCommand[];
@@ -307,6 +310,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [thinkingEffort, setThinkingEffortState] = useState<string>("medium");
 
   const [isTurnRunning, setIsTurnRunning] = useState<boolean>(false);
+  const [queuedFollowups, setQueuedFollowups] = useState<QueuedFollowup[]>([]);
+  const queuedFollowupsRef = useRef<QueuedFollowup[]>([]);
+  queuedFollowupsRef.current = queuedFollowups;
+  const drainNextFollowupRef = useRef<(agentId: string) => Promise<void>>(async () => {});
+  const isDrainingFollowupRef = useRef(false);
 
   const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
   const [commands, setCommands] = useState<AgentSlashCommand[]>([]);
@@ -1170,6 +1178,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         refreshAgents();
         if (targetAgentId) {
           refreshTimeline(targetAgentId);
+          setTimeout(() => {
+            void drainNextFollowupRef.current(targetAgentId);
+          }, 100);
         }
       } else if (event.type === "timeline" && event.item) {
         timelineRevisionRef.current += 1;
@@ -1354,6 +1365,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setAllAgents(updateList);
         if (agent.id === activeAgentId) {
           setIsTurnRunning(agent.status === "running");
+        }
+        if (agent.status !== "running") {
+          setTimeout(() => {
+            void drainNextFollowupRef.current(agent.id);
+          }, 100);
         }
 
         if (Array.isArray(agent.pendingPermissions)) {
@@ -1894,14 +1910,36 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     text: string,
     attachments?: string[],
     images?: ImageAttachment[],
-    options?: { activeTurnBehavior?: ActiveTurnBehavior },
+    options?: { activeTurnBehavior?: ActiveTurnBehavior; agentId?: string },
   ) => {
-    let targetAgentId = activeAgentId;
+    let targetAgentId = options?.agentId || activeAgentId;
 
     if (!targetAgentId) {
       const created = await createSession(text, undefined, images);
       if (created) return;
       throw new Error("No active session to send message to");
+    }
+
+    const isDebugRunning =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("debugRunning");
+
+    const isTargetRunning =
+      targetAgentId === activeAgentId
+        ? (isTurnRunning || isDebugRunning)
+        : allAgents.find((a) => a.id === targetAgentId)?.status === "running";
+
+    if (options?.activeTurnBehavior === "followup" && isTargetRunning) {
+      const queuedItem: QueuedFollowup = {
+        id: `queued_${crypto.randomUUID()}`,
+        agentId: targetAgentId,
+        text,
+        attachments,
+        images,
+        timestamp: new Date().toISOString(),
+      };
+      setQueuedFollowups((prev) => [...prev, queuedItem]);
+      return;
     }
 
     const canonical = resolveCanonicalModelId(selectedModel, models);
@@ -1927,9 +1965,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       images,
       activeTurnBehavior: options?.activeTurnBehavior,
     };
-    timelineRevisionRef.current += 1;
-    setTimeline((prev) => [...prev, userItem]);
-    setIsTurnRunning(true);
+    if (targetAgentId === activeAgentId) {
+      timelineRevisionRef.current += 1;
+      setTimeline((prev) => [...prev, userItem]);
+      setIsTurnRunning(true);
+    } else {
+      const cached = timelineCacheRef.current.get(targetAgentId) || [];
+      timelineCacheRef.current.set(targetAgentId, [...cached, userItem]);
+    }
 
     if (images && images.length > 0) {
       saveUserMessageAttachments(targetAgentId, messageId, text, images, messageId);
@@ -1965,17 +2008,56 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeTurnBehavior: options?.activeTurnBehavior,
       });
     } catch (err) {
-      setIsTurnRunning(false);
-      setTimeline((prev) => [
-        ...prev,
-        {
-          type: "error",
-          message: `Failed to send message: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      ]);
+      if (targetAgentId === activeAgentId) {
+        setIsTurnRunning(false);
+        setTimeline((prev) => [
+          ...prev,
+          {
+            type: "error",
+            message: `Failed to send message: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ]);
+      }
       throw err;
     }
   };
+
+  const drainNextFollowup = useCallback(async (agentId: string) => {
+    if (isDrainingFollowupRef.current) return;
+    const nextItem = queuedFollowupsRef.current.find((q) => q.agentId === agentId);
+    if (!nextItem) return;
+
+    isDrainingFollowupRef.current = true;
+    setQueuedFollowups((prev) => prev.filter((q) => q.id !== nextItem.id));
+
+    try {
+      await sendMessage(
+        nextItem.text,
+        nextItem.attachments,
+        nextItem.images,
+        { activeTurnBehavior: "followup", agentId: nextItem.agentId },
+      );
+    } catch (err) {
+      console.error("[WorkspaceProvider] Failed to send queued followup:", err);
+    } finally {
+      isDrainingFollowupRef.current = false;
+    }
+  }, [activeAgentId, allAgents, isTurnRunning, selectedModel, models, activeAgent, client]);
+
+  drainNextFollowupRef.current = drainNextFollowup;
+
+  const cancelQueuedFollowup = useCallback((id: string) => {
+    setQueuedFollowups((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (!isTurnRunning && activeAgentId) {
+      const timer = setTimeout(() => {
+        void drainNextFollowup(activeAgentId);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isTurnRunning, activeAgentId, drainNextFollowup]);
 
   const createSession = useCallback(async (
     initialPrompt?: string,
@@ -2356,6 +2438,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         sendMessage,
         createSession,
         cancelTurn,
+        queuedFollowups,
+        cancelQueuedFollowup,
 
         commands,
         refreshCommands,
