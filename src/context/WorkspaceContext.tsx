@@ -14,6 +14,7 @@ import type {
   ReasoningTimelineItem,
   ToolCallTimelineItem,
   TodoTimelineItem,
+  CompactionTimelineItem,
   PendingPermission,
   AgentPermissionResponse,
   AgentPermissionRequest,
@@ -548,11 +549,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (res && Array.isArray(res.entries)) {
           const items: TimelineItem[] = [];
           for (const e of res.entries) {
-            if (e.item) {
-              items.push(e.item);
-            } else if (e.type) {
-              items.push(e);
+            const rawItem = e.item || (e.type ? e : null);
+            if (!rawItem) continue;
+            const item = rawItem as TimelineItem;
+            if (item.type === "compaction" && item.status === "completed") {
+              const loadingIdx = items.findLastIndex(
+                (p) => p.type === "compaction" && (p as CompactionTimelineItem).status === "loading",
+              );
+              if (loadingIdx >= 0) {
+                items[loadingIdx] = {
+                  ...(items[loadingIdx] as CompactionTimelineItem),
+                  ...item,
+                };
+                continue;
+              }
             }
+            items.push(item);
           }
           timelineCacheRef.current.set(id, items);
           setTimeline(items);
@@ -880,12 +892,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         event.type === "turn_canceled"
       ) {
         setIsTurnRunning(false);
-        // Mark all reasoning blocks as non-streaming and capture duration
+        // Mark all reasoning blocks as non-streaming and capture duration, and resolve loading compaction
         setTimeline((prev) =>
           prev.map((item) => {
             if (item.type === "reasoning" && (item as any).isStreaming) {
               const dur = (item as any).startedAt ? Date.now() - (item as any).startedAt : item.durationMs;
               return { ...item, isStreaming: false, durationMs: dur };
+            }
+            if (item.type === "compaction" && (item as any).status === "loading") {
+              return { ...item, status: "completed" };
             }
             return item;
           }),
@@ -1015,6 +1030,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             if (idx >= 0) {
               next[idx] = item;
               return next;
+            }
+            return [...next, item];
+          }
+
+          // 6. Compaction
+          if (item.type === "compaction") {
+            endPriorReasoningStreaming();
+            if (item.status === "completed") {
+              const loadingIdx = next.findLastIndex(
+                (p) => p.type === "compaction" && (p as CompactionTimelineItem).status === "loading",
+              );
+              if (loadingIdx >= 0) {
+                const existing = next[loadingIdx] as CompactionTimelineItem;
+                next[loadingIdx] = {
+                  ...existing,
+                  ...item,
+                  status: "completed",
+                  trigger: item.trigger ?? existing.trigger,
+                  preTokens: item.preTokens ?? existing.preTokens,
+                };
+                return next;
+              }
             }
             return [...next, item];
           }

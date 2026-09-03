@@ -6,6 +6,7 @@ import { AssistantMessage } from "./AssistantMessage";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { ToolCallItem } from "./ToolCallItem";
 import { TodoBlock } from "./TodoBlock";
+import { CompactionMarker } from "./CompactionMarker";
 import { PendingPermissionCard } from "./PendingPermissionCard";
 import {
   Sparkles,
@@ -300,6 +301,8 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                   return <ToolCallItem key={index} item={item} />;
                 case "todo":
                   return <TodoBlock key={index} item={item} />;
+                case "compaction":
+                  return <CompactionMarker key={index} item={item} />;
                 case "error":
                   return (
                     <div

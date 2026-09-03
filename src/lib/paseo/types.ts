@@ -292,6 +292,13 @@ export interface PermissionRequestTimelineItem {
   status: "pending" | "granted" | "denied";
 }
 
+export interface CompactionTimelineItem {
+  type: "compaction";
+  status: "loading" | "completed";
+  trigger?: "auto" | "manual";
+  preTokens?: number;
+}
+
 export interface PendingPermission {
   key: string;
   agentId: string;
@@ -305,7 +312,8 @@ export type TimelineItem =
   | ToolCallTimelineItem
   | TodoTimelineItem
   | ErrorTimelineItem
-  | PermissionRequestTimelineItem;
+  | PermissionRequestTimelineItem
+  | CompactionTimelineItem;
 
 export interface TerminalSessionInfo {
   id: string;
