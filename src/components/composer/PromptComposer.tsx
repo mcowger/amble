@@ -4,6 +4,7 @@ import { ModelSelector } from "./ModelSelector";
 import { EffortSelector } from "./EffortSelector";
 import { SlashCommands, type SlashCommandItem } from "./SlashCommands";
 import { FileMentionPopup } from "./FileMentionPopup";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
   ArrowUp,
   Square,
@@ -18,6 +19,8 @@ import {
   Layers,
   Sparkles,
   Search,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 
 function getModeIcon(modeId: string) {
@@ -53,6 +56,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   const [prompt, setPrompt] = useState(initialValue);
   const [slashFilter, setSlashFilter] = useState<string | null>(null);
   const [mentionFilter, setMentionFilter] = useState<string | null>(null);
+  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -172,6 +176,8 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     cmd.action();
   };
 
+  const currentMode = modes.find((mode) => mode.id === selectedMode) || modes[0];
+
   const sampleFiles = [
     ...(gitStatus?.stagedFiles.map((f) => f.path) || []),
     ...(gitStatus?.unstagedFiles.map((f) => f.path) || []),
@@ -225,12 +231,13 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         />
 
         {/* Controls Row */}
-        <div className="flex items-center justify-between pt-1 border-t border-border/40 select-none">
+        <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40 select-none">
           {/* Left: Mode selector & Model / Effort */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
             {/* Mode Pills */}
             {modes.length > 0 && (
-              <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30">
+              <>
+                <div className="hidden md:flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30 shrink-0">
                 {modes.map((m) => {
                   const isActive = m.id === selectedMode;
                   return (
@@ -261,7 +268,65 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                     </button>
                   );
                 })}
-              </div>
+                </div>
+
+                {currentMode && (
+                  <Popover open={isModeMenuOpen} onOpenChange={setIsModeMenuOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={!canChangeMode}
+                        className="md:hidden flex min-w-0 max-w-[88px] max-[380px]:w-[72px] max-[380px]:gap-0.5 max-[380px]:px-1 shrink-0 items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
+                        title={
+                          canChangeMode
+                            ? "Select agent mode"
+                            : `Mode: ${currentMode.name}`
+                        }
+                        aria-label="Select agent mode"
+                      >
+                        {getModeIcon(currentMode.id)}
+                        <span className="min-w-0 truncate">{currentMode.name}</span>
+                        <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      side="top"
+                      align="start"
+                      sideOffset={6}
+                      className="w-56 p-1.5"
+                    >
+                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Agent Mode
+                      </div>
+                      <div className="space-y-0.5">
+                        {modes.map((m) => {
+                          const isActive = m.id === selectedMode;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              disabled={!canChangeMode || isActive}
+                              onClick={() => {
+                                setSelectedMode(m.id);
+                                setIsModeMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors disabled:cursor-default ${
+                                isActive
+                                  ? "bg-primary/10 text-primary font-medium"
+                                  : "text-foreground hover:bg-accent cursor-pointer"
+                              }`}
+                            >
+                              {getModeIcon(m.id)}
+                              <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                              {isActive && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </>
             )}
 
             {/* Model & Effort */}
