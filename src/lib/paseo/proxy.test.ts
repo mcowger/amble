@@ -279,4 +279,29 @@ describe("Paseo WebSocket Proxy Relay", () => {
       proxy.stop();
     }
   });
+
+  it("does not block proxied Host headers when development: false is set", async () => {
+    const s = serve({
+      port: 0,
+      development: false,
+      routes: {
+        "/api/health": {
+          GET() {
+            return Response.json({ status: "ok" });
+          },
+        },
+      },
+    });
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${s.port}/api/health`, {
+        headers: { Host: "dev--amble-test.paseoapps.home.cowger.us" },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.status).toBe("ok");
+    } finally {
+      s.stop(true);
+    }
+  });
 });
