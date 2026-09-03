@@ -8,39 +8,45 @@ import {
 import type { AgentModel } from "./paseo/types";
 
 describe("isModelVisionCapable", () => {
-  test("identifies Gemini models as vision capable", () => {
-    expect(isModelVisionCapable("plexus/gemini-3.1-pro-preview")).toBe(true);
-    expect(isModelVisionCapable("plexus/gemini-3.8-flash")).toBe(true);
-    expect(isModelVisionCapable("gemini-1.5-pro")).toBe(true);
+  test("returns false without Paseo metadata, even for vision-sounding ids", () => {
+    expect(isModelVisionCapable("plexus/gemini-3.1-pro-preview")).toBe(false);
+    expect(isModelVisionCapable("gpt-4o")).toBe(false);
+    expect(isModelVisionCapable("claude-3-5-sonnet-20241022")).toBe(false);
+    expect(isModelVisionCapable(null)).toBe(false);
+    expect(isModelVisionCapable(undefined)).toBe(false);
+    expect(isModelVisionCapable("unknown-model-id")).toBe(false);
   });
 
-  test("identifies Claude modern models as vision capable", () => {
-    expect(isModelVisionCapable("plexus/claude-haiku-4-5")).toBe(true);
-    expect(isModelVisionCapable("plexus/claude-sonnet-5")).toBe(true);
-    expect(isModelVisionCapable("claude-3-5-sonnet-20241022")).toBe(true);
-    expect(isModelVisionCapable("plexus/claude-opus-5")).toBe(true);
+  test("returns false for unknown string ids not present in the models list", () => {
+    const models: AgentModel[] = [
+      { id: "opencode/gemini", name: "Gemini", provider: "opencode" },
+    ];
+    expect(isModelVisionCapable("plexus/gemini-3.1-pro-preview", models)).toBe(false);
   });
 
-  test("identifies GPT-4o / GPT-5 models as vision capable", () => {
-    expect(isModelVisionCapable("plexus/gpt-5.6-luna")).toBe(true);
-    expect(isModelVisionCapable("gpt-4o")).toBe(true);
-    expect(isModelVisionCapable("o1")).toBe(true);
+  test("resolves string ids against the models list", () => {
+    const models: AgentModel[] = [
+      {
+        id: "opencode/gpt-4o",
+        name: "GPT-4o",
+        provider: "opencode",
+        metadata: { supportsAttachments: true },
+      },
+      {
+        id: "opencode/deepseek-chat",
+        name: "DeepSeek",
+        provider: "opencode",
+        metadata: { supportsAttachments: false },
+      },
+    ];
+    expect(isModelVisionCapable("opencode/gpt-4o", models)).toBe(true);
+    // suffix match: "gpt-4o" resolves to "opencode/gpt-4o"
+    expect(isModelVisionCapable("gpt-4o", models)).toBe(true);
+    // name match
+    expect(isModelVisionCapable("DeepSeek", models)).toBe(false);
   });
 
-  test("identifies Kimi K3 as vision capable", () => {
-    expect(isModelVisionCapable("plexus/kimi-k3")).toBe(true);
-  });
-
-  test("identifies text-only models as not vision capable", () => {
-    expect(isModelVisionCapable("plexus/deepseek-v4-flash-0731")).toBe(false);
-    expect(isModelVisionCapable("plexus/glm-5.3")).toBe(false);
-    expect(isModelVisionCapable("plexus/muse-spark-1.3")).toBe(false);
-    expect(isModelVisionCapable("deepseek-coder")).toBe(false);
-    expect(isModelVisionCapable("claude-2.1")).toBe(false);
-    expect(isModelVisionCapable("gpt-3.5-turbo")).toBe(false);
-  });
-
-  test("honors explicit metadata flags on model objects", () => {
+  test("honors explicit supportsVision flag on model objects", () => {
     const customVision: AgentModel = {
       id: "custom/my-model",
       name: "My Model",
@@ -56,7 +62,9 @@ describe("isModelVisionCapable", () => {
       supportsVision: false,
     };
     expect(isModelVisionCapable(customTextOnly)).toBe(false);
+  });
 
+  test("honors Paseo metadata signals", () => {
     const withMetaAttachment: AgentModel = {
       id: "opencode/model-with-meta",
       name: "Model With Meta",
@@ -66,6 +74,47 @@ describe("isModelVisionCapable", () => {
       },
     };
     expect(isModelVisionCapable(withMetaAttachment)).toBe(true);
+
+    const withMetaVision: AgentModel = {
+      id: "opencode/vision-model",
+      name: "Vision Model",
+      provider: "opencode",
+      metadata: { supportsVision: true },
+    };
+    expect(isModelVisionCapable(withMetaVision)).toBe(true);
+
+    const withInputModality: AgentModel = {
+      id: "some/image-model",
+      name: "Image Model",
+      provider: "custom",
+      metadata: { input: ["text", "image"] },
+    };
+    expect(isModelVisionCapable(withInputModality)).toBe(true);
+
+    const withModalities: AgentModel = {
+      id: "some/other-model",
+      name: "Other Model",
+      provider: "custom",
+      metadata: { modalities: ["text", "image"] },
+    };
+    expect(isModelVisionCapable(withModalities)).toBe(true);
+  });
+
+  test("treats models as text-only when Paseo declares no image support", () => {
+    const noMeta: AgentModel = {
+      id: "plexus/muse-spark-1.3",
+      name: "Muse Spark",
+      provider: "plexus",
+    };
+    expect(isModelVisionCapable(noMeta)).toBe(false);
+
+    const textOnlyMeta: AgentModel = {
+      id: "opencode/text-model",
+      name: "Text Model",
+      provider: "opencode",
+      metadata: { supportsAttachments: false },
+    };
+    expect(isModelVisionCapable(textOnlyMeta)).toBe(false);
   });
 });
 

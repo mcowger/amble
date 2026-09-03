@@ -11,55 +11,17 @@ export const SUPPORTED_IMAGE_MIMES = [
 ] as const;
 
 /**
- * Known vision model patterns.
- * Modern multimodal models support image input.
- */
-const VISION_MODEL_PATTERNS = [
-  // Gemini: all 1.5, 2.0, 3.x Flash & Pro are natively multimodal
-  /gemini/i,
-  // Claude: all Claude 3, 3.5, 3.7, 4, 4.5, 5 models support vision
-  /claude-(?:3|4|5|haiku|sonnet|opus|fable)/i,
-  /claude-3/i,
-  // OpenAI: GPT-4o, GPT-4-turbo, GPT-4.5, GPT-5, o1, o3
-  /gpt-(?:4o|4-turbo|4\.5|5)/i,
-  /\bo[13]\b/i,
-  /\bo[13]-(?:mini|preview|full)\b/i,
-  // Qwen VL
-  /qwen.*(?:vl|vision)/i,
-  /\bqvq\b/i,
-  // Llama Vision
-  /llama.*(?:vision|vl)/i,
-  // Pixtral
-  /pixtral/i,
-  // Kimi K3 / VL
-  /kimi-k3/i,
-  /kimi.*(?:vl|vision)/i,
-  // GLM Vision
-  /glm-.*(?:v|vision)/i,
-  // Generic keywords
-  /vision/i,
-  /multimodal/i,
-  /\bvl\b/i,
-];
-
-/**
- * Known text-only model patterns that should NOT be considered vision capable,
- * even if their provider or name might otherwise match a looser rule.
- */
-const TEXT_ONLY_MODEL_PATTERNS = [
-  /deepseek-(?:v2|v3|v4|coder|chat)/i,
-  /codellama/i,
-  /text-embedding/i,
-  /whisper/i,
-  /glm-(?:5\.3|4|3)(?!.*(?:v|vision))/i,
-  /muse-spark/i,
-  /claude-(?:1|2|instant)/i,
-  /gpt-3\.5/i,
-  /gpt-4-(?!turbo|vision|o\b)/i,
-];
-
-/**
- * Determines whether a given model or model ID supports vision / image input.
+ * Determines whether a given model supports vision / image input.
+ *
+ * The answer comes exclusively from Paseo's providers snapshot metadata.
+ * Amble does no name-based guessing: if Paseo doesn't declare image
+ * support, the model is treated as text-only.
+ *
+ * Honored signals (in order):
+ * - `model.supportsVision`
+ * - `model.metadata.supportsVision` / `model.metadata.supportsAttachments`
+ *   (opencode provider reports `supportsAttachments`)
+ * - `model.metadata.input` / `model.metadata.modalities` containing "image"
  */
 export function isModelVisionCapable(
   modelOrId: AgentModel | string | null | undefined,
@@ -68,53 +30,33 @@ export function isModelVisionCapable(
   if (!modelOrId) return false;
 
   let model: AgentModel | undefined;
-  let modelIdStr = "";
 
   if (typeof modelOrId === "string") {
-    modelIdStr = modelOrId;
     model =
       modelsList.find((m) => m.id === modelOrId) ||
       modelsList.find((m) => m.id.endsWith(`/${modelOrId}`)) ||
       modelsList.find((m) => m.name === modelOrId);
+    if (!model) return false;
   } else {
     model = modelOrId;
-    modelIdStr = model.id;
   }
 
-  // 1. Explicit metadata checks if available
-  if (model) {
-    if (typeof model.supportsVision === "boolean") {
-      return model.supportsVision;
-    }
-
-    const meta = model.metadata as Record<string, unknown> | undefined;
-    if (meta) {
-      if (typeof meta.supportsVision === "boolean") {
-        return meta.supportsVision;
-      }
-      if (typeof meta.supportsAttachments === "boolean") {
-        return meta.supportsAttachments;
-      }
-      if (Array.isArray(meta.input) && meta.input.includes("image")) {
-        return true;
-      }
-      if (Array.isArray(meta.modalities) && meta.modalities.includes("image")) {
-        return true;
-      }
-    }
+  if (typeof model.supportsVision === "boolean") {
+    return model.supportsVision;
   }
 
-  // 2. Check if explicitly text-only pattern matches
-  const targetString = `${modelIdStr} ${model?.displayName ?? ""} ${model?.name ?? ""}`.trim();
-  for (const pattern of TEXT_ONLY_MODEL_PATTERNS) {
-    if (pattern.test(targetString)) {
-      return false;
+  const meta = model.metadata as Record<string, unknown> | undefined;
+  if (meta) {
+    if (typeof meta.supportsVision === "boolean") {
+      return meta.supportsVision;
     }
-  }
-
-  // 3. Check if vision pattern matches
-  for (const pattern of VISION_MODEL_PATTERNS) {
-    if (pattern.test(targetString)) {
+    if (typeof meta.supportsAttachments === "boolean") {
+      return meta.supportsAttachments;
+    }
+    if (Array.isArray(meta.input) && meta.input.includes("image")) {
+      return true;
+    }
+    if (Array.isArray(meta.modalities) && meta.modalities.includes("image")) {
       return true;
     }
   }
