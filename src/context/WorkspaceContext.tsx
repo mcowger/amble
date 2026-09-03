@@ -22,6 +22,7 @@ import type {
   AgentSlashCommand,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
+import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
 
 export type ActiveTabKind = "agent" | "terminal" | "changes";
 
@@ -279,8 +280,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     const tabs: WorkspaceTabItem[] = [];
 
-    // ONLY agents that belong to resolvedWorkspaceId
-    const workspaceAgents = allAgents.filter((a) => a.workspaceId === resolvedWorkspaceId);
+    // ONLY agents that belong to resolvedWorkspaceId, stably ordered by creation time
+    const workspaceAgents = allAgents
+      .filter((a) => a.workspaceId === resolvedWorkspaceId)
+      .slice()
+      .sort(compareAgentSnapshotsByCreation);
 
     for (const a of workspaceAgents) {
       tabs.push({
@@ -292,12 +296,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // ONLY terminals that belong to resolvedWorkspaceId
-    const workspaceTerminals = terminals.filter((t) => {
-      if (t.workspaceId) return t.workspaceId === resolvedWorkspaceId;
-      if (activeWorkspace?.path && t.cwd) return t.cwd === activeWorkspace.path;
-      return false;
-    });
+    // ONLY terminals that belong to resolvedWorkspaceId, ordered by slot
+    const workspaceTerminals = terminals
+      .filter((t) => {
+        if (t.workspaceId) return t.workspaceId === resolvedWorkspaceId;
+        if (activeWorkspace?.path && t.cwd) return t.cwd === activeWorkspace.path;
+        return false;
+      })
+      .slice()
+      .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
 
     for (const t of workspaceTerminals) {
       tabs.push({
@@ -492,6 +499,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         list.push(...res.agents.map(normalizeAgentSnapshot));
       }
 
+      list.sort(compareAgentSnapshotsByCreation);
+
       setAllAgents(list);
 
       const filtered = activeWorkspaceId
@@ -515,8 +524,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
 
-      if (list.length > 0 && (!activeAgentId || !list.some((a) => a.id === activeAgentId))) {
-        setActiveAgentIdState(list[0]!.id);
+      const activeCandidates = activeWorkspaceId ? filtered : list;
+      if (activeCandidates.length > 0 && (!activeAgentId || !activeCandidates.some((a) => a.id === activeAgentId))) {
+        setActiveAgentIdState(activeCandidates[0]!.id);
       }
     } catch (err) {
       console.warn("[WorkspaceProvider] fetchAgents error:", err);
@@ -1105,7 +1115,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             next[idx] = { ...next[idx], ...agent };
             return next;
           }
-          return [agent, ...prev];
+          const next = [...prev, agent];
+          return next.sort(compareAgentSnapshotsByCreation);
         };
         setAgents(updateList);
         setAllAgents(updateList);
@@ -1197,9 +1208,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           await client.archiveAgent(tab.targetId);
           await refreshAgents();
           if (activeTab?.targetId === tab.targetId) {
+            const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
             const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
             if (remaining.length > 0) {
-              setActiveTab(remaining[0]!);
+              const nextTab = remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
+              setActiveTab(nextTab);
             } else {
               setActiveTabTarget(null);
               setActiveAgentIdState(null);
@@ -1209,9 +1222,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           await client.killTerminal(tab.targetId);
           await refreshTerminals();
           if (activeTab?.targetId === tab.targetId) {
+            const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
             const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
             if (remaining.length > 0) {
-              setActiveTab(remaining[0]!);
+              const nextTab = remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
+              setActiveTab(nextTab);
             } else {
               setActiveTabTarget(null);
             }
@@ -1505,8 +1520,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       if (res && res.agent) {
         const agent = normalizeAgentSnapshot(res.agent);
-        setAllAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
-        setAgents((prev) => [agent, ...prev.filter((a) => a.id !== agent.id)]);
+        setAllAgents((prev) => {
+          const next = [...prev.filter((a) => a.id !== agent.id), agent];
+          return next.sort(compareAgentSnapshotsByCreation);
+        });
+        setAgents((prev) => {
+          const next = [...prev.filter((a) => a.id !== agent.id), agent];
+          return next.sort(compareAgentSnapshotsByCreation);
+        });
         setActiveAgentIdState(agent.id);
         setActiveTabTarget({ kind: "agent", targetId: agent.id });
         setActiveWorkspaceIdState(resolvedWorkspaceId);
