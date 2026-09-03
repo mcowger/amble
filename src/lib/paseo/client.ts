@@ -426,12 +426,16 @@ export class PaseoClient {
   }
 
   public async createWorktree(params: CreateWorktreeParams): Promise<CreateWorktreeResult> {
+    const firstAgentContext =
+      params.firstAgentContext ||
+      (params.nameContext ? { prompt: params.nameContext } : undefined);
     const res = await this.daemon.createPaseoWorktree({
       cwd: params.cwd,
       projectId: params.projectId,
       worktreeSlug: params.worktreeSlug,
       refName: params.refName,
       action: params.action,
+      firstAgentContext: firstAgentContext as any,
     });
     return res as any;
   }
@@ -781,5 +785,21 @@ export class PaseoClient {
       throw new Error(payload.error?.message || "Commit failed");
     }
     return payload;
+  }
+
+  public async setWorkspaceTitle(
+    workspaceId: string,
+    title: string | null,
+  ): Promise<{ title: string | null }> {
+    const res = await this.daemon.setWorkspaceTitle(workspaceId, title);
+    return res;
+  }
+
+  public async getDaemonConfig(): Promise<{ config: any }> {
+    return this.daemon.getDaemonConfig();
+  }
+
+  public async patchDaemonConfig(config: any): Promise<any> {
+    return this.daemon.patchDaemonConfig(config);
   }
 }

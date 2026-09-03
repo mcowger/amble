@@ -52,6 +52,21 @@ export interface WorkspaceTabItem {
   status?: "idle" | "running" | "paused" | "completed" | "failed" | "canceled";
 }
 
+export function deriveSessionTitle(prompt: string): string {
+  const firstLine =
+    prompt
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) || "";
+  const cleaned = firstLine
+    .replace(/^#+\s*/, "")
+    .replace(/^[-*+]\s*/, "")
+    .replace(/^\d+\.\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 60).trim();
+}
+
 interface WorkspaceContextType {
   projects: ProjectItem[];
   workspaces: WorkspaceItem[];
@@ -59,12 +74,19 @@ interface WorkspaceContextType {
   activeWorkspace: WorkspaceItem | null;
   setActiveWorkspaceId: (id: string | null) => void;
   refreshWorkspaces: () => Promise<void>;
+  updateWorkspaceTitle: (workspaceId: string, title: string) => Promise<void>;
   createWorktree: (params: {
     projectId: string;
     cwd?: string;
     worktreeSlug?: string;
     refName?: string;
     action?: "branch-off" | "checkout";
+    nameContext?: string;
+    firstAgentContext?: {
+      prompt?: string;
+      attachments?: any[];
+    };
+    title?: string;
   }) => Promise<CreateWorktreeResult>;
 
   allAgents: AgentSnapshot[];
@@ -484,6 +506,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           list.push({
             id: entry.id,
             name: entry.title || entry.name || entry.projectDisplayName || entry.id,
+            title: entry.title || undefined,
             path: entry.workspaceDirectory || entry.projectRootPath || "",
             isFavorite: !!entry.pinnedAt,
             projectId: entry.projectId,
@@ -1659,6 +1682,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [client, refreshAgents],
   );
 
+  const updateWorkspaceTitle = useCallback(
+    async (workspaceId: string, title: string): Promise<void> => {
+      const trimmed = title.trim();
+      if (!workspaceId) return;
+      try {
+        setWorkspaces((prev) =>
+          prev.map((w) =>
+            w.id === workspaceId
+              ? { ...w, title: trimmed || undefined, name: trimmed || w.name }
+              : w,
+          ),
+        );
+        await client.setWorkspaceTitle(workspaceId, trimmed || null);
+        await refreshWorkspaces();
+      } catch (err) {
+        console.warn("[WorkspaceProvider] updateWorkspaceTitle error:", err);
+      }
+    },
+    [client, refreshWorkspaces],
+  );
+
   const renameTerminalSession = useCallback(
     async (terminalId: string, title: string): Promise<void> => {
       const trimmed = title.trim();
@@ -1872,6 +1916,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       saveUserMessageAttachments(targetAgentId, messageId, text, images, messageId);
     }
 
+    // Auto-generate / derive initial session title on first message if currently untitled
+    const isAutoTitleEnabled =
+      typeof window === "undefined" ||
+      localStorage.getItem("amble-auto-session-titles") !== "false";
+
+    const currentAgent = allAgents.find((a) => a.id === targetAgentId) || activeAgent;
+    if (
+      isAutoTitleEnabled &&
+      targetAgentId &&
+      currentAgent &&
+      (!currentAgent.title ||
+        currentAgent.title === "Untitled Session" ||
+        currentAgent.name === "Untitled Session")
+    ) {
+      const derived = deriveSessionTitle(text);
+      if (derived) {
+        void updateAgentTitle(targetAgentId, derived);
+      }
+    }
+
     try {
       await client.sendAgentMessage({
         agentId: targetAgentId,
@@ -2015,6 +2079,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       worktreeSlug?: string;
       refName?: string;
       action?: "branch-off" | "checkout";
+      nameContext?: string;
+      firstAgentContext?: {
+        prompt?: string;
+        attachments?: any[];
+      };
+      title?: string;
     }): Promise<CreateWorktreeResult> => {
       let resolvedCwd = params.cwd;
       if (!resolvedCwd) {
@@ -2036,10 +2106,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           worktreeSlug: params.worktreeSlug,
           refName: params.refName,
           action: params.action,
+          nameContext: params.nameContext,
+          firstAgentContext: params.firstAgentContext,
+          title: params.title,
         });
 
         if (res.error) {
           return { error: res.error, errorCode: res.errorCode };
+        }
+
+        if (params.title && res.workspace?.id) {
+          await client.setWorkspaceTitle(res.workspace.id, params.title).catch(() => {});
         }
 
         await refreshWorkspaces();
@@ -2214,6 +2291,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         activeWorkspace,
         setActiveWorkspaceId,
         refreshWorkspaces,
+        updateWorkspaceTitle,
         createWorktree,
 
         allAgents,

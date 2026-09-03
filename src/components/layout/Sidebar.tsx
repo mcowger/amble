@@ -24,7 +24,10 @@ import {
   AlertCircle,
   Check,
   Search,
+  Sparkles,
+  Pencil,
 } from "lucide-react";
+import { slugify } from "@getpaseo/protocol/branch-slug";
 import {
   Dialog,
   DialogContent,
@@ -239,6 +242,8 @@ export function CreateWorktreeModal({
   const { client } = usePaseo();
   const { workspaces, createWorktree } = useWorkspace();
   const [tab, setTab] = useState<"new" | "existing">("new");
+  const [featureDescription, setFeatureDescription] = useState("");
+  const [featureTitle, setFeatureTitle] = useState("");
   const [branchName, setBranchName] = useState("");
   const [baseBranch, setBaseBranch] = useState("main");
   const [existingBranch, setExistingBranch] = useState("");
@@ -256,6 +261,8 @@ export function CreateWorktreeModal({
 
   useEffect(() => {
     if (!isOpen || !project) {
+      setFeatureDescription("");
+      setFeatureTitle("");
       setBranchName("");
       setExistingBranch("");
       setError(null);
@@ -306,19 +313,29 @@ export function CreateWorktreeModal({
 
     try {
       if (tab === "new") {
-        const trimmedSlug = branchName.trim().replace(/\s+/g, "-");
-        if (!trimmedSlug) {
-          setError("Branch name is required");
+        let trimmedSlug = branchName.trim().replace(/\s+/g, "-");
+        const trimmedDesc = featureDescription.trim();
+        const trimmedTitle = featureTitle.trim();
+
+        if (!trimmedSlug && !trimmedDesc) {
+          setError("Please provide a branch name or feature description");
           setIsSubmitting(false);
           return;
+        }
+
+        if (!trimmedSlug && trimmedDesc) {
+          trimmedSlug = slugify(trimmedDesc).slice(0, 45);
         }
 
         const res = await createWorktree({
           projectId: project.id,
           cwd: resolvedRootPath,
-          worktreeSlug: trimmedSlug,
+          worktreeSlug: trimmedSlug || undefined,
           refName: baseBranch.trim() || undefined,
           action: "branch-off",
+          nameContext: trimmedDesc || undefined,
+          firstAgentContext: trimmedDesc ? { prompt: trimmedDesc } : undefined,
+          title: trimmedTitle || (trimmedDesc ? trimmedDesc.slice(0, 60) : undefined),
         });
 
         if (res.error) {
@@ -328,6 +345,7 @@ export function CreateWorktreeModal({
         }
       } else {
         const trimmedRef = existingBranch.trim();
+        const trimmedTitle = featureTitle.trim();
         if (!trimmedRef) {
           setError("Existing branch is required");
           setIsSubmitting(false);
@@ -339,6 +357,7 @@ export function CreateWorktreeModal({
           cwd: resolvedRootPath,
           refName: trimmedRef,
           action: "checkout",
+          title: trimmedTitle || undefined,
         });
 
         if (res.error) {
@@ -392,12 +411,49 @@ export function CreateWorktreeModal({
             </TabsList>
 
             <TabsContent value="new" className="space-y-3 pt-3">
+              {/* Feature Description (AI metadata generation) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    Feature Description / Prompt
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground/70">AI metadata</span>
+                </div>
+                <Input
+                  type="text"
+                  value={featureDescription}
+                  onChange={(e) => {
+                    setFeatureDescription(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="e.g. Add metadata generation for feature and session titles"
+                  className="text-xs"
+                  autoFocus
+                  disabled={isSubmitting}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Paseo generates the feature title and branch name from this context.
+                </p>
+              </div>
+
               {/* Branch / Worktree Slug */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <GitBranch className="w-3.5 h-3.5" />
-                  Branch / Worktree Name
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                    <GitBranch className="w-3.5 h-3.5" />
+                    Branch / Worktree Name
+                  </Label>
+                  {featureDescription && (
+                    <button
+                      type="button"
+                      onClick={() => setBranchName(slugify(featureDescription).slice(0, 40))}
+                      className="text-[11px] text-primary hover:underline cursor-pointer"
+                    >
+                      Use suggested slug
+                    </button>
+                  )}
+                </div>
                 <Input
                   type="text"
                   value={branchName}
@@ -405,14 +461,33 @@ export function CreateWorktreeModal({
                     setBranchName(e.target.value);
                     if (error) setError(null);
                   }}
-                  placeholder="e.g. feat/dashboard or bugfix-auth"
+                  placeholder={
+                    featureDescription
+                      ? slugify(featureDescription).slice(0, 40)
+                      : "e.g. feat/dashboard (leave blank to auto-generate)"
+                  }
                   className="text-xs font-mono"
-                  autoFocus
                   disabled={isSubmitting}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  A new git branch and dedicated worktree directory will be created.
+                  Leave blank to auto-generate branch name from the feature description.
                 </p>
+              </div>
+
+              {/* Feature Title (Optional) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Pencil className="w-3.5 h-3.5" />
+                  Feature Title (Optional)
+                </Label>
+                <Input
+                  type="text"
+                  value={featureTitle}
+                  onChange={(e) => setFeatureTitle(e.target.value)}
+                  placeholder="e.g. Metadata Generation Support"
+                  className="text-xs"
+                  disabled={isSubmitting}
+                />
               </div>
 
               {/* Base Branch */}
@@ -456,6 +531,22 @@ export function CreateWorktreeModal({
                   Checks out an existing local or remote branch into a new worktree.
                 </p>
               </div>
+
+              {/* Feature Title (Optional) */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Pencil className="w-3.5 h-3.5" />
+                  Feature Title (Optional)
+                </Label>
+                <Input
+                  type="text"
+                  value={featureTitle}
+                  onChange={(e) => setFeatureTitle(e.target.value)}
+                  placeholder="e.g. Navigation Refactor"
+                  className="text-xs"
+                  disabled={isSubmitting}
+                />
+              </div>
             </TabsContent>
           </Tabs>
 
@@ -483,7 +574,9 @@ export function CreateWorktreeModal({
               size="sm"
               disabled={
                 isSubmitting ||
-                (tab === "new" ? !branchName.trim() : !existingBranch.trim())
+                (tab === "new"
+                  ? !branchName.trim() && !featureDescription.trim()
+                  : !existingBranch.trim())
               }
               className="gap-1.5 text-xs font-medium"
             >
@@ -516,7 +609,11 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
     setActiveAgentId,
     setActiveWorkspaceId,
     createSession,
+    updateWorkspaceTitle,
   } = useWorkspace();
+
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
   const [projectCollapseOverrides, setProjectCollapseOverrides] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
@@ -600,6 +697,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
         : [];
 
       const worktrees = worktreeWorkspaces.map((wt) => ({
+        title: wt.title,
         branch: wt.branch || wt.worktreeSlug || wt.name,
         workspaceId: wt.id,
         sessions: allAgents.filter((a) => a.workspaceId === wt.id),
@@ -844,54 +942,133 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
                         worktreeCollapseOverrides,
                         hasWorktreeChildren,
                       );
+                      const isEditingThisTitle = editingWorkspaceId === wt.workspaceId;
+                      const displayTitle = wt.title?.trim();
+                      const hasDistinctTitle = Boolean(displayTitle && displayTitle !== wt.branch);
 
                       return (
                         <div key={wtKey} className="space-y-0.5">
                           {/* Worktree Header */}
-                          <div
-                            onClick={() => {
-                              if (hasWorktreeChildren) {
-                                toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
-                              }
-                            }}
-                            className={`group pl-5 pr-1 py-0.5 flex items-center justify-between text-muted-foreground hover:text-foreground rounded hover:bg-accent/30 transition-colors ${
-                              hasWorktreeChildren ? "cursor-pointer" : "cursor-default"
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {hasWorktreeChildren ? (
+                          {isEditingThisTitle ? (
+                            <div
+                              className="pl-5 pr-2 py-1 flex items-center gap-1.5 rounded bg-accent/40"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <GitFork className="w-3.5 h-3.5 shrink-0 text-primary" />
+                              <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onKeyDown={async (e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    if (editingTitle.trim() && wt.workspaceId) {
+                                      await updateWorkspaceTitle(wt.workspaceId, editingTitle.trim());
+                                    }
+                                    setEditingWorkspaceId(null);
+                                  } else if (e.key === "Escape") {
+                                    setEditingWorkspaceId(null);
+                                  }
+                                }}
+                                className="flex-1 bg-background border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (editingTitle.trim() && wt.workspaceId) {
+                                    await updateWorkspaceTitle(wt.workspaceId, editingTitle.trim());
+                                  }
+                                  setEditingWorkspaceId(null);
+                                }}
+                                className="p-0.5 rounded hover:bg-accent text-primary cursor-pointer"
+                                title="Save title"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingWorkspaceId(null)}
+                                className="p-0.5 rounded hover:bg-accent text-muted-foreground cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => {
+                                if (hasWorktreeChildren) {
+                                  toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
+                                }
+                              }}
+                              className={`group pl-5 pr-1 py-1 flex items-center justify-between text-muted-foreground hover:text-foreground rounded hover:bg-accent/30 transition-colors ${
+                                hasWorktreeChildren ? "cursor-pointer" : "cursor-default"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
+                                {hasWorktreeChildren ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
+                                    }}
+                                    className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
+                                    title={isWorktreeCollapsed ? "Expand worktree" : "Collapse worktree"}
+                                  >
+                                    <ChevronRight
+                                      className={`w-3 h-3 transition-transform duration-150 ${
+                                        !isWorktreeCollapsed ? "rotate-90" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                ) : (
+                                  <span className="w-4 shrink-0" />
+                                )}
+                                <GitFork className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                                {hasDistinctTitle ? (
+                                  <div className="flex flex-col min-w-0 leading-tight">
+                                    <span className="text-xs font-medium truncate text-foreground">
+                                      {displayTitle}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-muted-foreground/80 truncate">
+                                      {wt.branch}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-medium truncate">{wt.branch}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {wt.workspaceId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingWorkspaceId(wt.workspaceId);
+                                      setEditingTitle(wt.title || wt.branch);
+                                    }}
+                                    className="p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer"
+                                    title="Rename feature title"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
+                                    handleNewSession(wt.workspaceId || directWorkspace?.id || project.id);
                                   }}
-                                  className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
-                                  title={isWorktreeCollapsed ? "Expand worktree" : "Collapse worktree"}
+                                  className="p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer"
+                                  title={`New session in ${wt.branch}`}
                                 >
-                                  <ChevronRight
-                                    className={`w-3 h-3 transition-transform duration-150 ${
-                                      !isWorktreeCollapsed ? "rotate-90" : ""
-                                    }`}
-                                  />
+                                  <Plus className="w-3 h-3" />
                                 </button>
-                              ) : (
-                                <span className="w-4 shrink-0" />
-                              )}
-                              <GitFork className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                              <span className="text-xs font-medium truncate">{wt.branch}</span>
+                              </div>
                             </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleNewSession(wt.workspaceId || directWorkspace?.id || project.id);
-                              }}
-                              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer transition-opacity"
-                              title={`New session in ${wt.branch}`}
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                          </div>
+                          )}
 
                           {/* Worktree Sessions */}
                           {!isWorktreeCollapsed &&

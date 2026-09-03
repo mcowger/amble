@@ -92,6 +92,7 @@ export interface ProjectItem {
 export interface WorkspaceItem {
   id: string;
   name: string;
+  title?: string;
   path: string;
   icon?: string;
   isFavorite?: boolean;
@@ -108,9 +109,20 @@ export interface WorkspaceItem {
 export interface WorktreeItem {
   id: string;
   name: string;
+  title?: string;
   path: string;
   branch?: string;
   isClean?: boolean;
+}
+
+export interface MetadataGenerationProviderConfig {
+  provider: string;
+  model?: string;
+  thinkingOptionId?: string;
+}
+
+export interface MetadataGenerationConfig {
+  providers?: MetadataGenerationProviderConfig[];
 }
 
 export interface CreateWorktreeParams {
@@ -119,6 +131,12 @@ export interface CreateWorktreeParams {
   worktreeSlug?: string;
   refName?: string;
   action?: "branch-off" | "checkout";
+  nameContext?: string;
+  firstAgentContext?: {
+    prompt?: string;
+    attachments?: any[];
+  };
+  title?: string;
 }
 
 export interface CreateWorktreeResult {
