@@ -260,6 +260,7 @@ export interface ReasoningTimelineItem {
   isStreaming?: boolean;
   durationMs?: number;
   startedAt?: number;
+  turnId?: string;
 }
 
 export interface ToolCallTimelineItem {

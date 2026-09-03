@@ -11,7 +11,6 @@ import type {
   TerminalSessionInfo,
   UserMessageTimelineItem,
   AssistantMessageTimelineItem,
-  ReasoningTimelineItem,
   ToolCallTimelineItem,
   TodoTimelineItem,
   CompactionTimelineItem,
@@ -38,6 +37,7 @@ import {
   findMatchingAttachment,
   matchesUserMessageItem,
 } from "../lib/attachmentStore";
+import { appendReasoningTimelineItem } from "../lib/paseo/timeline";
 
 export type ActiveTabKind = "agent" | "terminal" | "changes";
 
@@ -417,6 +417,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Track in-flight timeline requests to avoid race conditions
   const activeTimelineFetchRef = useRef<string | null>(null);
+  const timelineRevisionRef = useRef(0);
 
   // Sync current timeline into cache whenever it updates
   useEffect(() => {
@@ -592,6 +593,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       activeTimelineFetchRef.current = id;
+      const requestRevision = timelineRevisionRef.current;
 
       // Show cached timeline immediately if available (0ms delay, zero flicker)
       const cached = timelineCacheRef.current.get(id);
@@ -605,7 +607,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const res = await client.fetchAgentTimeline(id);
-        if (activeTimelineFetchRef.current !== id) return;
+        if (
+          activeTimelineFetchRef.current !== id ||
+          timelineRevisionRef.current !== requestRevision
+        ) {
+          return;
+        }
         if (res && Array.isArray(res.entries)) {
           // Pre-load saved attachments for this agent from memory or trigger async load
           const savedAttachments = getCachedAgentAttachments(id);
@@ -643,6 +650,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                 };
                 continue;
               }
+            }
+            if (item.type === "reasoning" && typeof e.turnId === "string") {
+              item = { ...item, turnId: e.turnId };
             }
             items.push(item);
           }
@@ -906,9 +916,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       refreshTimeline(activeAgentId);
       refreshCommands(activeAgentId);
       client.setAgentTimelineSubscription([activeAgentId]).catch(console.warn);
-      if (activeAgent) {
-        setIsTurnRunning(activeAgent.status === "running");
-      }
     } else if (!activeAgentId) {
       setTimeline([]);
       setIsTimelineLoading(false);
@@ -918,7 +925,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         client.setAgentTimelineSubscription([]).catch(console.warn);
       }
     }
-  }, [activeAgentId, connectionState, refreshTimeline, refreshCommands, client, activeAgent]);
+  }, [activeAgentId, connectionState, refreshTimeline, refreshCommands, client]);
+
+  useEffect(() => {
+    if (activeAgent) {
+      setIsTurnRunning(activeAgent.status === "running");
+    }
+  }, [activeAgent?.id, activeAgent?.status]);
 
   // Poll agents while a turn is actively running to catch intermediate step token updates
   useEffect(() => {
@@ -1020,6 +1033,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (event.type === "turn_started") {
+        timelineRevisionRef.current += 1;
         setIsTurnRunning(true);
       } else if (event.type === "permission_requested") {
         const req = event.request || (event as any).payload?.request;
@@ -1070,6 +1084,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         event.type === "turn_failed" ||
         event.type === "turn_canceled"
       ) {
+        timelineRevisionRef.current += 1;
         setIsTurnRunning(false);
         // Mark all reasoning blocks as non-streaming and capture duration, and resolve loading compaction
         setTimeline((prev) =>
@@ -1090,6 +1105,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           refreshTimeline(targetAgentId);
         }
       } else if (event.type === "timeline" && event.item) {
+        timelineRevisionRef.current += 1;
         const item: TimelineItem = event.item;
 
         setTimeline((prev) => {
@@ -1155,34 +1171,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
           // 3. Reasoning / Thinking Traces (smart cumulative vs delta streaming)
           if (item.type === "reasoning") {
-            const lastIdx = next.length - 1;
-            const last = next[lastIdx];
-            if (last && last.type === "reasoning" && (last as ReasoningTimelineItem).isStreaming) {
-              const prevText = (last as ReasoningTimelineItem).text || "";
-              const chunkText = item.text || "";
-
-              let nextText = prevText;
-              if (chunkText.startsWith(prevText)) {
-                nextText = chunkText;
-              } else if (prevText.endsWith(chunkText) && chunkText.length > 0) {
-                nextText = prevText;
-              } else {
-                nextText = prevText + chunkText;
-              }
-
-              next[lastIdx] = {
-                ...last,
-                ...item,
-                text: nextText,
-                isStreaming: true,
-                startedAt: (last as any).startedAt || Date.now(),
-              };
-              return next;
-            }
-
-            // A brand new thought section has begun! Mark prior reasoning blocks as finished
-            endPriorReasoningStreaming();
-            return [...next, { ...item, isStreaming: true, startedAt: Date.now() }];
+            const turnId = typeof event.turnId === "string" ? event.turnId : undefined;
+            return appendReasoningTimelineItem(next, item, turnId);
           }
 
           // 4. User Messages (correlate optimistic sends and restore attachments)
@@ -1845,6 +1835,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       attachments,
       images,
     };
+    timelineRevisionRef.current += 1;
     setTimeline((prev) => [...prev, userItem]);
     setIsTurnRunning(true);
 
