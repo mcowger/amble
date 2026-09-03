@@ -4,6 +4,7 @@ import { usePaseo } from "../../context/PaseoContext";
 import { ScrollArea } from "../ui/scroll-area";
 import type { ProjectItem, WorkspaceItem, AgentSnapshot } from "../../lib/paseo/types";
 import type { PaseoClient } from "../../lib/paseo/client";
+import { cn } from "../../lib/utils";
 import {
   Folder,
   GitFork,
@@ -11,8 +12,11 @@ import {
   Plus,
   X,
   ChevronRight,
+  ChevronDown,
   Loader2,
   AlertCircle,
+  Check,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -22,6 +26,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "../ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -86,22 +91,146 @@ function ProjectIcon({ project, client }: { project: ProjectItem; client: PaseoC
   return <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
 }
 
+function BranchCombobox({
+  value,
+  onChange,
+  branches,
+  placeholder,
+  disabled,
+  isLoading,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  branches: string[];
+  placeholder?: string;
+  disabled?: boolean;
+  isLoading?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const filteredBranches = useMemo(() => {
+    if (!filter.trim()) return branches;
+    const q = filter.trim().toLowerCase();
+    return branches.filter((b) => b.toLowerCase().includes(q));
+  }, [branches, filter]);
+
+  const hasExactMatch = useMemo(() => {
+    return branches.some((b) => b.toLowerCase() === filter.trim().toLowerCase());
+  }, [branches, filter]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setFilter("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-2xs transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 text-foreground cursor-pointer"
+        >
+          <div className="flex items-center gap-2 min-w-0 truncate">
+            <GitBranch className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className={cn("truncate", !value && "text-muted-foreground")}>
+              {value || placeholder || "Select branch..."}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+            {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+          </div>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className="w-[var(--radix-popover-trigger-width)] min-w-[320px] p-1.5 bg-popover border-border shadow-lg"
+      >
+        <div className="p-1 pb-1.5">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter branches..."
+              className="pl-8 h-8 text-xs font-mono"
+              autoFocus
+            />
+          </div>
+        </div>
+        <ScrollArea className="max-h-52" viewportClassName="max-h-52">
+          <div className="space-y-0.5 p-0.5">
+            {filteredBranches.map((branch) => {
+              const isSelected = branch === value;
+              return (
+                <button
+                  key={branch}
+                  type="button"
+                  onClick={() => {
+                    onChange(branch);
+                    setOpen(false);
+                    setFilter("");
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-mono text-left cursor-pointer transition-colors ${
+                    isSelected
+                      ? "bg-accent text-accent-foreground font-semibold"
+                      : "hover:bg-accent/50 text-foreground"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0 truncate">
+                    <GitBranch className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">{branch}</span>
+                  </div>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
+                </button>
+              );
+            })}
+
+            {filter.trim() && !hasExactMatch && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(filter.trim());
+                  setOpen(false);
+                  setFilter("");
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-mono text-left cursor-pointer hover:bg-accent/50 text-muted-foreground hover:text-foreground border-t border-border/40 mt-1 pt-1.5"
+              >
+                <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="truncate">Use &quot;{filter.trim()}&quot;</span>
+              </button>
+            )}
+
+            {filteredBranches.length === 0 && !filter.trim() && (
+              <div className="p-3 text-center text-xs text-muted-foreground">
+                No branches found
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function CreateWorktreeModal({
   isOpen,
   onClose,
-  initialProject,
-  projects,
+  project,
   onCreated,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  initialProject: ProjectItem | null;
-  projects: ProjectItem[];
+  project: ProjectItem | null;
   onCreated?: (project: ProjectItem) => void;
 }) {
   const { client } = usePaseo();
   const { workspaces, createWorktree } = useWorkspace();
-  const [currentProject, setCurrentProject] = useState<ProjectItem | null>(initialProject);
   const [tab, setTab] = useState<"new" | "existing">("new");
   const [branchName, setBranchName] = useState("");
   const [baseBranch, setBaseBranch] = useState("main");
@@ -111,23 +240,15 @@ export function CreateWorktreeModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (initialProject) {
-      setCurrentProject(initialProject);
-    } else if (projects.length > 0 && !currentProject) {
-      setCurrentProject(projects[0] || null);
-    }
-  }, [initialProject, projects]);
-
   const resolvedRootPath = useMemo(() => {
-    if (!currentProject) return "";
-    if (currentProject.rootPath) return currentProject.rootPath;
-    const ws = workspaces.find((w) => w.projectId === currentProject.id);
+    if (!project) return "";
+    if (project.rootPath) return project.rootPath;
+    const ws = workspaces.find((w) => w.projectId === project.id);
     return ws?.path || "";
-  }, [currentProject, workspaces]);
+  }, [project, workspaces]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !project) {
       setBranchName("");
       setExistingBranch("");
       setError(null);
@@ -164,11 +285,11 @@ export function CreateWorktreeModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, currentProject?.id, resolvedRootPath, client]);
+  }, [isOpen, project?.id, resolvedRootPath, client]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentProject || !resolvedRootPath) {
+    if (!project || !resolvedRootPath) {
       setError("Project directory could not be located");
       return;
     }
@@ -186,7 +307,7 @@ export function CreateWorktreeModal({
         }
 
         const res = await createWorktree({
-          projectId: currentProject.id,
+          projectId: project.id,
           cwd: resolvedRootPath,
           worktreeSlug: trimmedSlug,
           refName: baseBranch.trim() || undefined,
@@ -207,7 +328,7 @@ export function CreateWorktreeModal({
         }
 
         const res = await createWorktree({
-          projectId: currentProject.id,
+          projectId: project.id,
           cwd: resolvedRootPath,
           refName: trimmedRef,
           action: "checkout",
@@ -220,8 +341,8 @@ export function CreateWorktreeModal({
         }
       }
 
-      if (currentProject) {
-        onCreated?.(currentProject);
+      if (project) {
+        onCreated?.(project);
       }
       onClose();
     } catch (err: any) {
@@ -242,37 +363,13 @@ export function CreateWorktreeModal({
           <DialogDescription>
             Create a git worktree for{" "}
             <span className="font-semibold text-foreground">
-              {currentProject?.name || "project"}
+              {project?.name || "project"}
             </span>
             .
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
-          {projects.length > 1 && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                <Folder className="w-3.5 h-3.5" />
-                Target Project
-              </Label>
-              <select
-                value={currentProject?.id || ""}
-                onChange={(e) => {
-                  const found = projects.find((p) => p.id === e.target.value);
-                  if (found) setCurrentProject(found);
-                }}
-                className="w-full text-xs font-medium rounded-md border border-input bg-background px-3 py-1.5 shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
-                disabled={isSubmitting}
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <Tabs
             value={tab}
             onValueChange={(val) => setTab(val as "new" | "existing")}
@@ -317,27 +414,14 @@ export function CreateWorktreeModal({
                   <GitFork className="w-3.5 h-3.5" />
                   Base Branch (Branch off from)
                 </Label>
-                <div className="relative">
-                  <Input
-                    type="text"
-                    list="base-branch-options"
-                    value={baseBranch}
-                    onChange={(e) => setBaseBranch(e.target.value)}
-                    placeholder="main"
-                    className="text-xs font-mono"
-                    disabled={isSubmitting}
-                  />
-                  {isLoadingBranches && (
-                    <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-2.5 text-muted-foreground" />
-                  )}
-                </div>
-                {branchSuggestions.length > 0 && (
-                  <datalist id="base-branch-options">
-                    {branchSuggestions.map((b) => (
-                      <option key={b} value={b} />
-                    ))}
-                  </datalist>
-                )}
+                <BranchCombobox
+                  value={baseBranch}
+                  onChange={(val) => setBaseBranch(val)}
+                  branches={branchSuggestions}
+                  placeholder="Select base branch..."
+                  disabled={isSubmitting}
+                  isLoading={isLoadingBranches}
+                />
                 <p className="text-[11px] text-muted-foreground">
                   The starting commit / branch to branch off from (defaults to main).
                 </p>
@@ -350,40 +434,17 @@ export function CreateWorktreeModal({
                   <GitBranch className="w-3.5 h-3.5" />
                   Existing Branch to Checkout
                 </Label>
-                {branchSuggestions.length > 0 ? (
-                  <select
-                    value={existingBranch}
-                    onChange={(e) => {
-                      setExistingBranch(e.target.value);
-                      if (error) setError(null);
-                    }}
-                    className="w-full text-xs font-mono rounded-md border border-input bg-background px-3 py-1.5 shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
-                    disabled={isSubmitting}
-                  >
-                    {branchSuggestions.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="relative">
-                    <Input
-                      type="text"
-                      value={existingBranch}
-                      onChange={(e) => {
-                        setExistingBranch(e.target.value);
-                        if (error) setError(null);
-                      }}
-                      placeholder="e.g. origin/feature-login"
-                      className="text-xs font-mono"
-                      disabled={isSubmitting}
-                    />
-                    {isLoadingBranches && (
-                      <Loader2 className="w-3 h-3 animate-spin absolute right-2.5 top-2.5 text-muted-foreground" />
-                    )}
-                  </div>
-                )}
+                <BranchCombobox
+                  value={existingBranch}
+                  onChange={(val) => {
+                    setExistingBranch(val);
+                    if (error) setError(null);
+                  }}
+                  branches={branchSuggestions}
+                  placeholder="Select branch to checkout..."
+                  disabled={isSubmitting}
+                  isLoading={isLoadingBranches}
+                />
                 <p className="text-[11px] text-muted-foreground">
                   Checks out an existing local or remote branch into a new worktree.
                 </p>
@@ -895,8 +956,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
       <CreateWorktreeModal
         isOpen={!!targetWorktreeProject}
         onClose={() => setTargetWorktreeProject(null)}
-        initialProject={targetWorktreeProject}
-        projects={projects}
+        project={targetWorktreeProject}
         onCreated={(proj) => {
           setCollapsedProjects((prev) => {
             const next = new Set(prev);
