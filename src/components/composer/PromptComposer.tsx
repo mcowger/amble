@@ -90,16 +90,6 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
   }, [initialValue]);
 
-  // Clear pending images if model switches to a non-vision model
-  useEffect(() => {
-    if (!isVisionCapable && pendingImages.length > 0) {
-      setPendingImages([]);
-      setImageError("Pending image attachments removed because selected model does not support images.");
-    } else if (isVisionCapable) {
-      setImageError((prev) => (prev?.includes("removed because selected model") ? null : prev));
-    }
-  }, [isVisionCapable, pendingImages.length]);
-
   // Autosize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -114,11 +104,6 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   const handleAddFiles = useCallback(async (files: File[]) => {
     setImageError(null);
     if (files.length === 0) return;
-
-    if (!isVisionCapable) {
-      setImageError("Selected model does not support image input. Please switch to a vision model to attach images.");
-      return;
-    }
 
     const newAttachments: ImageAttachment[] = [];
     for (const file of files) {
@@ -141,7 +126,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         textareaRef.current.focus();
       }
     }
-  }, [isVisionCapable]);
+  }, []);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -478,26 +463,16 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
       {/* Full-window drop target overlay */}
       {isDraggingOver && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs pointer-events-none transition-all">
-          <div
-            className={`flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed ${
-              isVisionCapable ? "border-primary bg-card/95" : "border-destructive/60 bg-card/95"
-            } shadow-2xl space-y-3 max-w-sm text-center`}
-          >
-            <div
-              className={`p-3 rounded-full ${
-                isVisionCapable ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
-              }`}
-            >
-              {isVisionCapable ? <Plus className="w-8 h-8" /> : <AlertCircle className="w-8 h-8" />}
+          <div className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-primary bg-card/95 shadow-2xl space-y-3 max-w-sm text-center">
+            <div className="p-3 rounded-full bg-primary/10 text-primary">
+              <Plus className="w-8 h-8" />
             </div>
             <div>
               <div className="text-sm font-semibold text-foreground">
-                {isVisionCapable ? "Drop images to attach" : "Images Not Supported"}
+                Drop images to attach
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {isVisionCapable
-                  ? "PNG, JPEG, WebP, GIF up to 20MB"
-                  : "The selected model does not support image input. Please select a vision model."}
+                PNG, JPEG, WebP, GIF up to 20MB
               </div>
             </div>
           </div>
@@ -581,29 +556,29 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40 select-none">
           {/* Left: Mode selector & Model / Effort & Image upload button */}
           <div className="flex min-w-0 flex-1 items-center gap-1">
-            {/* Upload Button: Visible & active when isVisionCapable */}
-            {isVisionCapable && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileInputChange}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-7 flex items-center justify-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
-                  title="Attach image (vision model active)"
-                  aria-label="Attach image"
-                >
-                  <Plus className="w-3.5 h-3.5 text-primary" />
-                  <span className="hidden sm:inline text-[11px]">Image</span>
-                </button>
-              </>
-            )}
+            {/* Upload Button: Always available (matches Paseo composer behavior) */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-7 flex items-center justify-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
+              title={
+                isVisionCapable
+                  ? "Attach image (vision model active)"
+                  : "Attach image"
+              }
+              aria-label="Attach image"
+            >
+              <Plus className="w-3.5 h-3.5 text-primary" />
+              <span className="hidden sm:inline text-[11px]">Image</span>
+            </button>
 
             {/* Mode Pills */}
             {modes.length > 0 && (
