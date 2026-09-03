@@ -5,10 +5,33 @@ import type { ConnectionState, ServerInfoPayload } from "../lib/paseo/types";
 export function getDefaultPaseoUrl(): string {
   if (typeof window !== "undefined") {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname || "127.0.0.1";
-    return `${proto}//${host}:6767/ws`;
+    const host = window.location.host || "127.0.0.1:5173";
+    return `${proto}//${host}/api/paseo/ws`;
   }
-  return "ws://127.0.0.1:6767/ws";
+  return "ws://127.0.0.1:5173/api/paseo/ws";
+}
+
+const LEGACY_DEFAULT_PATTERNS = [
+  /^wss?:\/\/(127\.0\.0\.1|localhost):6767\/ws$/,
+];
+
+function getInitialPaseoUrl(): string {
+  if (typeof window === "undefined") {
+    return getDefaultPaseoUrl();
+  }
+  const stored = localStorage.getItem("amble-paseo-url");
+  if (!stored) {
+    return getDefaultPaseoUrl();
+  }
+  const isLegacyDefault =
+    LEGACY_DEFAULT_PATTERNS.some((p) => p.test(stored)) ||
+    stored === `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:6767/ws`;
+  if (isLegacyDefault) {
+    const updated = getDefaultPaseoUrl();
+    localStorage.setItem("amble-paseo-url", updated);
+    return updated;
+  }
+  return stored;
 }
 
 interface PaseoContextType {
@@ -25,12 +48,7 @@ interface PaseoContextType {
 const PaseoContext = createContext<PaseoContextType | undefined>(undefined);
 
 export function PaseoProvider({ children }: { children: React.ReactNode }) {
-  const [serverUrl, setServerUrlState] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("amble-paseo-url") || getDefaultPaseoUrl();
-    }
-    return "ws://127.0.0.1:6767/ws";
-  });
+  const [serverUrl, setServerUrlState] = useState<string>(() => getInitialPaseoUrl());
 
   const [authToken, setAuthTokenState] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -84,10 +102,15 @@ export function PaseoProvider({ children }: { children: React.ReactNode }) {
   }, [client]);
 
   const setServerUrl = (url: string) => {
-    setServerUrlState(url);
-    client.setUrl(url);
+    let resolved = url.trim();
+    if (typeof window !== "undefined" && resolved.startsWith("/")) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      resolved = `${proto}//${window.location.host}${resolved}`;
+    }
+    setServerUrlState(resolved);
+    client.setUrl(resolved);
     if (typeof window !== "undefined") {
-      localStorage.setItem("amble-paseo-url", url);
+      localStorage.setItem("amble-paseo-url", resolved);
     }
   };
 

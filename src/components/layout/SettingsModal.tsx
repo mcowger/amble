@@ -71,11 +71,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               type="text"
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="ws://127.0.0.1:6767/ws"
+              placeholder="/api/paseo/ws"
               className="text-xs font-mono"
             />
             <p className="text-[11px] text-muted-foreground">
-              Direct WebSocket connection to the local Paseo daemon.
+              Same-origin proxy (/api/paseo/ws) or direct WebSocket URL to Paseo daemon.
             </p>
           </div>
 

@@ -55,7 +55,7 @@ export class PaseoClient {
   private unsubscribeTerminalStream: (() => void) | null = null;
 
   constructor(config: PaseoClientConfig = {}) {
-    this.url = config.url || this.getDefaultUrl();
+    this.url = this.normalizeUrl(config.url || this.getDefaultUrl());
     this.token = config.token;
     this.clientId = config.clientId || this.getOrCreateClientId();
 
@@ -174,13 +174,23 @@ export class PaseoClient {
     }
   }
 
+  private normalizeUrl(url: string): string {
+    const trimmed = url.trim();
+    if (typeof window !== "undefined" && trimmed.startsWith("/")) {
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = window.location.host || "127.0.0.1:5173";
+      return `${proto}//${host}${trimmed}`;
+    }
+    return trimmed;
+  }
+
   private getDefaultUrl(): string {
     if (typeof window !== "undefined") {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.hostname || "127.0.0.1";
-      return `${proto}//${host}:6767/ws`;
+      const host = window.location.host || "127.0.0.1:5173";
+      return `${proto}//${host}/api/paseo/ws`;
     }
-    return "ws://127.0.0.1:6767/ws";
+    return "ws://127.0.0.1:5173/api/paseo/ws";
   }
 
   private getOrCreateClientId(): string {
@@ -261,9 +271,14 @@ export class PaseoClient {
     }
   }
 
+  public getUrl(): string {
+    return this.url;
+  }
+
   public setUrl(url: string) {
-    if (this.url !== url) {
-      this.url = url;
+    const resolved = this.normalizeUrl(url);
+    if (this.url !== resolved) {
+      this.url = resolved;
       this.recreateDaemon();
     }
   }
