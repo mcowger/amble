@@ -29,6 +29,13 @@ import {
   extractEmbeddedActions,
   getSubagentDetails,
 } from "../lib/subagent-helpers";
+import {
+  saveUserMessageAttachments,
+  getCachedAgentAttachments,
+  loadAgentAttachments,
+  findMatchingAttachment,
+  matchesUserMessageItem,
+} from "../lib/attachmentStore";
 
 export type ActiveTabKind = "agent" | "terminal" | "changes";
 
@@ -570,11 +577,31 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const res = await client.fetchAgentTimeline(id);
         if (activeTimelineFetchRef.current !== id) return;
         if (res && Array.isArray(res.entries)) {
+          // Pre-load saved attachments for this agent from memory or trigger async load
+          const savedAttachments = getCachedAgentAttachments(id);
+          const currentTimeline = timelineCacheRef.current.get(id) || [];
+
           const items: TimelineItem[] = [];
           for (const e of res.entries) {
             const rawItem = e.item || (e.type ? e : null);
             if (!rawItem) continue;
-            const item = rawItem as TimelineItem;
+            let item = rawItem as TimelineItem;
+
+            if (item.type === "user_message") {
+              const uItem = item as UserMessageTimelineItem;
+              const inCurrent = currentTimeline.find(
+                (p) => p.type === "user_message" && matchesUserMessageItem(p as UserMessageTimelineItem, uItem),
+              ) as UserMessageTimelineItem | undefined;
+              const inStore = findMatchingAttachment(savedAttachments, uItem);
+              const resolvedImages = uItem.images || inCurrent?.images || inStore?.images;
+              if (resolvedImages && resolvedImages.length > 0) {
+                item = {
+                  ...uItem,
+                  images: resolvedImages,
+                };
+              }
+            }
+
             if (item.type === "compaction" && item.status === "completed") {
               const loadingIdx = items.findLastIndex(
                 (p) => p.type === "compaction" && (p as CompactionTimelineItem).status === "loading",
@@ -591,6 +618,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           }
           timelineCacheRef.current.set(id, items);
           setTimeline(items);
+
+          // Asynchronously ensure IndexedDB attachments are loaded and reconciled
+          loadAgentAttachments(id).then((persisted) => {
+            if (activeTimelineFetchRef.current !== id || !persisted || persisted.length === 0) return;
+            setTimeline((prev) => {
+              let changed = false;
+              const next = prev.map((item) => {
+                if (item.type === "user_message" && !(item as UserMessageTimelineItem).images?.length) {
+                  const match = findMatchingAttachment(persisted, item as UserMessageTimelineItem);
+                  if (match?.images && match.images.length > 0) {
+                    changed = true;
+                    return { ...item, images: match.images };
+                  }
+                }
+                return item;
+              });
+              if (changed) {
+                timelineCacheRef.current.set(id, next);
+                return next;
+              }
+              return prev;
+            });
+          }).catch(() => {});
 
           // Query provider subagents for this agent to populate historical child actions
           client.listProviderSubagents(id).then(async (subRes) => {
@@ -1097,22 +1147,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             return [...next, { ...item, isStreaming: true, startedAt: Date.now() }];
           }
 
-          // 4. User Messages (correlate optimistic sends)
+          // 4. User Messages (correlate optimistic sends and restore attachments)
           if (item.type === "user_message") {
+            const uItem = item as UserMessageTimelineItem;
+            const savedAttachments = getCachedAgentAttachments(targetAgentId);
+            const inStore = findMatchingAttachment(savedAttachments, uItem);
+
             const idx = next.findIndex(
               (p) =>
                 p.type === "user_message" &&
-                (p.text === item.text || (item.messageId && p.messageId === item.messageId)),
+                matchesUserMessageItem(p as UserMessageTimelineItem, uItem),
             );
             if (idx >= 0) {
               const existing = next[idx] as UserMessageTimelineItem;
               next[idx] = {
                 ...item,
-                images: (item as any).images || existing.images,
+                images: uItem.images || existing.images || inStore?.images,
               };
               return next;
             }
-            return [...next, item];
+            const resolvedImages = uItem.images || inStore?.images;
+            return [...next, resolvedImages ? { ...item, images: resolvedImages } : item];
           }
 
           // 5. Todos
@@ -1664,16 +1719,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const messageId = `msg_${crypto.randomUUID()}`;
+
     // Optimistically add user message to timeline
     const userItem: UserMessageTimelineItem = {
       type: "user_message",
       text,
       timestamp: new Date().toISOString(),
+      messageId,
+      clientMessageId: messageId,
       attachments,
       images,
     };
     setTimeline((prev) => [...prev, userItem]);
     setIsTurnRunning(true);
+
+    if (images && images.length > 0) {
+      saveUserMessageAttachments(targetAgentId, messageId, text, images, messageId);
+    }
 
     try {
       await client.sendAgentMessage({
@@ -1681,6 +1744,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         text,
         attachments,
         images,
+        messageId,
       });
     } catch (err) {
       setIsTurnRunning(false);
@@ -1728,6 +1792,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Could not find or open workspace");
       }
 
+      const messageId = `msg_${crypto.randomUUID()}`;
       const canonicalModel = resolveCanonicalModelId(selectedModel, models);
       const res = await client.createAgent({
         workspaceId: resolvedWorkspaceId,
@@ -1737,6 +1802,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         mode: selectedMode,
         thinkingEffort,
         initialPrompt,
+        clientMessageId: messageId,
         images,
       });
 
@@ -1753,9 +1819,25 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActiveAgentIdState(agent.id);
         setActiveTabTarget({ kind: "agent", targetId: agent.id });
         setActiveWorkspaceIdState(resolvedWorkspaceId);
-        setTimeline([]);
+
+        if (images && images.length > 0) {
+          saveUserMessageAttachments(agent.id, messageId, initialPrompt || "", images, messageId);
+        }
+
         if (initialPrompt) {
+          const initialUserItem: UserMessageTimelineItem = {
+            type: "user_message",
+            text: initialPrompt,
+            timestamp: new Date().toISOString(),
+            messageId,
+            clientMessageId: messageId,
+            images,
+          };
+          setTimeline([initialUserItem]);
+          timelineCacheRef.current.set(agent.id, [initialUserItem]);
           setIsTurnRunning(true);
+        } else {
+          setTimeline([]);
         }
         await refreshAgents();
         return agent;

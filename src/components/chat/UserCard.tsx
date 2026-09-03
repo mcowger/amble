@@ -13,8 +13,13 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
   const [copied, setCopied] = useState(false);
   const [previewImage, setPreviewImage] = useState<ImageAttachment | null>(null);
 
+  const displayText =
+    item.images && item.images.length > 0
+      ? item.text.replace(/\n?\[image\]/gi, "").trim()
+      : item.text;
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(item.text);
+    navigator.clipboard.writeText(displayText || item.text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -48,11 +53,11 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
       </div>
 
       {/* Message Text */}
-      {item.text && (
+      {displayText ? (
         <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground break-words [overflow-wrap:anywhere] min-w-0 max-w-full">
-          {item.text}
+          {displayText}
         </div>
-      )}
+      ) : null}
 
       {/* Uploaded Images */}
       {item.images && item.images.length > 0 && (

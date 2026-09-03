@@ -465,6 +465,7 @@ export class PaseoClient {
     mode?: string | null;
     thinkingEffort?: string;
     initialPrompt?: string;
+    clientMessageId?: string;
     images?: Array<{ data: string; mimeType: string }>;
   }): Promise<{ agent: AgentSnapshot }> {
     const agent = await this.daemon.createAgent({
@@ -478,6 +479,7 @@ export class PaseoClient {
         thinkingOptionId: params.thinkingEffort === "off" ? undefined : params.thinkingEffort,
       },
       initialPrompt: params.initialPrompt,
+      clientMessageId: params.clientMessageId,
       images: params.images,
     });
     return { agent: agent as any };
@@ -488,11 +490,13 @@ export class PaseoClient {
     text: string;
     attachments?: string[];
     images?: Array<{ data: string; mimeType: string }>;
+    messageId?: string;
   }): Promise<{ accepted: boolean }> {
     await this.setAgentTimelineSubscription([params.agentId]).catch(() => {});
     await this.daemon.sendAgentMessage(params.agentId, params.text, {
       attachments: params.attachments as any,
       images: params.images,
+      messageId: params.messageId,
     });
     return { accepted: true };
   }

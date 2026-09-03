@@ -16,5 +16,6 @@ All UI development must adhere to the design system codified in [`docs/DESIGN_SY
 ## Runtime & Architecture
 - **Runtime**: Native Bun (`Bun.serve()` with HTML imports). Do not use Vite, Fastify, Hono, or Express.
 - **WebSocket Protocol**: Connects to the local Paseo daemon at `ws://127.0.0.1:6767/ws`.
+- **Paseo Client**: This tool is strictly a client of the Paseo server. No code specific to any agent (opencode, pi, claude, etc.) should be written. Everything must interact solely with the Paseo API. Consequently, there is never a need to review or interact with opencode, pi, etc. source code, nor their configuration files or databases.
 - **Command Timeouts**: Always use short, explicit timeouts on terminal/bash tool commands (e.g. 5-10 seconds) to prevent command hanging.
 
