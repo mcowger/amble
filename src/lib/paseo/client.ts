@@ -24,6 +24,11 @@ import type {
   CreateWorktreeParams,
   CreateWorktreeResult,
   ActiveTurnBehavior,
+  ProjectAddResult,
+  ProjectCreateDirectoryResult,
+  GithubSearchRepositoriesResult,
+  ProjectGithubCloneResult,
+  DirectorySuggestionsResult,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -532,6 +537,48 @@ export class PaseoClient {
   // API Methods
   public async listProjects(): Promise<any> {
     return this.daemon.listProjects();
+  }
+
+  public async addProject(cwd: string): Promise<ProjectAddResult> {
+    const res = await this.daemon.addProject(cwd);
+    return res as ProjectAddResult;
+  }
+
+  public async createProjectDirectory(input: {
+    parentPath: string;
+    name: string;
+  }): Promise<ProjectCreateDirectoryResult> {
+    const res = await this.daemon.createProjectDirectory(input);
+    return res as ProjectCreateDirectoryResult;
+  }
+
+  public async searchGithubRepositories(input: {
+    query: string;
+    limit?: number;
+  }): Promise<GithubSearchRepositoriesResult> {
+    const res = await this.daemon.searchGithubRepositories(input);
+    return res as GithubSearchRepositoriesResult;
+  }
+
+  public async cloneGithubProject(input: {
+    repo: string;
+    targetDirectory: string;
+    cloneProtocol?: "https" | "ssh";
+  }): Promise<ProjectGithubCloneResult> {
+    const res = await this.daemon.cloneGithubProject(input);
+    return res as ProjectGithubCloneResult;
+  }
+
+  public async getDirectorySuggestions(options: {
+    query: string;
+    limit?: number;
+    cwd?: string;
+    includeFiles?: boolean;
+    includeDirectories?: boolean;
+    matchMode?: "fuzzy" | "suffix";
+  }): Promise<DirectorySuggestionsResult> {
+    const res = await this.daemon.getDirectorySuggestions(options);
+    return res as DirectorySuggestionsResult;
   }
 
   public async getProjectIcon(

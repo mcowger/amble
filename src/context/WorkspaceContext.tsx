@@ -23,6 +23,10 @@ import type {
   CreateWorktreeResult,
   ActiveTurnBehavior,
   QueuedFollowup,
+  ProjectAddResult,
+  ProjectCreateDirectoryResult,
+  GithubSearchRepositoriesResult,
+  ProjectGithubCloneResult,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
@@ -76,6 +80,24 @@ interface WorkspaceContextType {
   setActiveWorkspaceId: (id: string | null) => void;
   refreshWorkspaces: () => Promise<void>;
   updateWorkspaceTitle: (workspaceId: string, title: string) => Promise<void>;
+  registerProject: (cwd: string) => Promise<ProjectAddResult>;
+  createProjectDirectory: (
+    parentPath: string,
+    name: string,
+  ) => Promise<ProjectCreateDirectoryResult>;
+  cloneGithubProject: (
+    repo: string,
+    targetDirectory: string,
+    cloneProtocol?: "https" | "ssh",
+  ) => Promise<ProjectGithubCloneResult>;
+  getDirectorySuggestions: (
+    query: string,
+    options?: { cwd?: string; limit?: number },
+  ) => Promise<string[]>;
+  searchGithubRepositories: (
+    query: string,
+    limit?: number,
+  ) => Promise<GithubSearchRepositoriesResult>;
   createWorktree: (params: {
     projectId: string;
     cwd?: string;
@@ -2235,6 +2257,136 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [client, projects, workspaces, refreshWorkspaces, setActiveWorkspaceId],
   );
 
+  const registerProject = useCallback(
+    async (cwd: string): Promise<ProjectAddResult> => {
+      try {
+        const res = await client.addProject(cwd);
+        if (res.project) {
+          await refreshWorkspaces();
+          try {
+            const openRes = await client.openProject(res.project.projectRootPath || cwd);
+            if (openRes.workspace?.id) {
+              setActiveWorkspaceId(openRes.workspace.id);
+            }
+          } catch {}
+        }
+        return res;
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] registerProject error:", err);
+        return {
+          requestId: "",
+          project: null,
+          error: err?.message || String(err),
+        };
+      }
+    },
+    [client, refreshWorkspaces, setActiveWorkspaceId],
+  );
+
+  const createProjectDirectory = useCallback(
+    async (parentPath: string, name: string): Promise<ProjectCreateDirectoryResult> => {
+      try {
+        const res = await client.createProjectDirectory({ parentPath, name });
+        if (res.project || res.directoryPath) {
+          await refreshWorkspaces();
+          const targetPath = res.directoryPath || res.project?.projectRootPath;
+          if (targetPath) {
+            try {
+              const openRes = await client.openProject(targetPath);
+              if (openRes.workspace?.id) {
+                setActiveWorkspaceId(openRes.workspace.id);
+              }
+            } catch {}
+          }
+        }
+        return res;
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] createProjectDirectory error:", err);
+        return {
+          requestId: "",
+          directoryPath: null,
+          project: null,
+          error: err?.message || String(err),
+          errorCode: "filesystem_error",
+        };
+      }
+    },
+    [client, refreshWorkspaces, setActiveWorkspaceId],
+  );
+
+  const cloneGithubProject = useCallback(
+    async (
+      repo: string,
+      targetDirectory: string,
+      cloneProtocol?: "https" | "ssh",
+    ): Promise<ProjectGithubCloneResult> => {
+      try {
+        const res = await client.cloneGithubProject({ repo, targetDirectory, cloneProtocol });
+        if (res.project || res.checkoutPath) {
+          await refreshWorkspaces();
+          const targetPath = res.checkoutPath || res.project?.projectRootPath;
+          if (targetPath) {
+            try {
+              const openRes = await client.openProject(targetPath);
+              if (openRes.workspace?.id) {
+                setActiveWorkspaceId(openRes.workspace.id);
+              }
+            } catch {}
+          }
+        }
+        return res;
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] cloneGithubProject error:", err);
+        return {
+          requestId: "",
+          repo,
+          checkoutPath: null,
+          project: null,
+          error: err?.message || String(err),
+        };
+      }
+    },
+    [client, refreshWorkspaces, setActiveWorkspaceId],
+  );
+
+  const getDirectorySuggestions = useCallback(
+    async (query: string, options?: { cwd?: string; limit?: number }): Promise<string[]> => {
+      try {
+        const res = await client.getDirectorySuggestions({
+          query,
+          cwd: options?.cwd,
+          limit: options?.limit ?? 20,
+          includeDirectories: true,
+          includeFiles: false,
+          matchMode: "fuzzy",
+        });
+        return res.directories || [];
+      } catch (err) {
+        console.warn("[WorkspaceProvider] getDirectorySuggestions error:", err);
+        return [];
+      }
+    },
+    [client],
+  );
+
+  const searchGithubRepositories = useCallback(
+    async (query: string, limit?: number): Promise<GithubSearchRepositoriesResult> => {
+      try {
+        return await client.searchGithubRepositories({ query, limit: limit ?? 20 });
+      } catch (err: any) {
+        console.warn("[WorkspaceProvider] searchGithubRepositories error:", err);
+        return {
+          status: "error",
+          requestId: "",
+          repositories: [],
+          available: false,
+          error: err?.message || String(err),
+        };
+      }
+    },
+    [client],
+  );
+
   const createAgentTab = useCallback(
     async (initialPrompt?: string): Promise<AgentSnapshot | null> => {
       // Clear timeline immediately so previous session contents disappear instantly
@@ -2393,6 +2545,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActiveWorkspaceId,
         refreshWorkspaces,
         updateWorkspaceTitle,
+        registerProject,
+        createProjectDirectory,
+        cloneGithubProject,
+        getDirectorySuggestions,
+        searchGithubRepositories,
         createWorktree,
 
         allAgents,

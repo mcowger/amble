@@ -41,6 +41,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
+import { RegisterProjectModal } from "./RegisterProjectModal";
 
 interface SidebarProps {
   onCloseMobile?: () => void;
@@ -630,6 +631,7 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
   });
 
   const [targetWorktreeProject, setTargetWorktreeProject] = useState<ProjectItem | null>(null);
+  const [isRegisterProjectOpen, setIsRegisterProjectOpen] = useState(false);
 
   const toggleProjectCollapse = (projectId: string, isCurrentlyCollapsed: boolean) => {
     setProjectCollapseOverrides((prev) => {
@@ -804,17 +806,34 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
 
   return (
     <aside className="w-64 border-r border-border bg-sidebar flex flex-col h-full shrink-0 select-none">
-      {onCloseMobile && (
-        <div className="p-2.5 flex items-center justify-between md:hidden border-b border-border/40">
-          <span className="text-xs font-semibold">Workspaces</span>
+      {/* Fixed top header with '+' button and hairline separator */}
+      <div className="h-10 px-3 flex items-center justify-between border-b border-border/40 shrink-0">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Projects
+        </span>
+        <div className="flex items-center gap-1">
           <button
-            onClick={onCloseMobile}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground cursor-pointer"
+            type="button"
+            onClick={() => setIsRegisterProjectOpen(true)}
+            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer transition-colors"
+            title="Register new project"
+            aria-label="Register new project"
           >
-            <X className="w-4 h-4" />
+            <Plus className="w-4 h-4" />
           </button>
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer md:hidden transition-colors"
+              title="Close sidebar"
+              aria-label="Close sidebar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Tree list with Shadcn ScrollArea */}
       <ScrollArea className="flex-1 h-full min-h-0" viewportClassName="py-3 px-2">
@@ -1167,6 +1186,26 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
             }
             return next;
           });
+        }}
+      />
+
+      {/* Register Project Modal */}
+      <RegisterProjectModal
+        isOpen={isRegisterProjectOpen}
+        onClose={() => setIsRegisterProjectOpen(false)}
+        onProjectRegistered={(proj) => {
+          if (proj?.id || proj?.projectId) {
+            const id = proj.projectId || proj.id;
+            setProjectCollapseOverrides((prev) => {
+              const next = { ...prev, [id]: false };
+              if (typeof window !== "undefined") {
+                try {
+                  localStorage.setItem("amble-collapsed-projects", JSON.stringify(next));
+                } catch {}
+              }
+              return next;
+            });
+          }
         }}
       />
     </aside>

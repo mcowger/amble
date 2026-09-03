@@ -391,3 +391,98 @@ export interface GitFileChange {
   deletions?: number;
   diff?: string;
 }
+
+// Project registration and source options
+export interface ProjectAddResult {
+  requestId: string;
+  project: {
+    projectId: string;
+    projectKey?: string;
+    projectDisplayName: string;
+    projectRootPath: string;
+    projectKind: string;
+  } | null;
+  error: string | null;
+  errorCode?: string | null;
+}
+
+export interface ProjectCreateDirectoryResult {
+  requestId: string;
+  directoryPath: string | null;
+  project: {
+    projectId: string;
+    projectKey?: string;
+    projectDisplayName: string;
+    projectRootPath: string;
+    projectKind: string;
+  } | null;
+  error: string | null;
+  errorCode: string | null;
+}
+
+export interface GithubRepository {
+  id: string;
+  name: string;
+  nameWithOwner: string;
+  description: string | null;
+  visibility: "public" | "private" | "internal";
+  updatedAt: string;
+  cloneUrl: string;
+}
+
+export type GithubSearchRepositoriesResult =
+  | {
+      status: "success";
+      requestId: string;
+      repositories: GithubRepository[];
+      available: true;
+      error: null;
+    }
+  | {
+      status: "unavailable";
+      requestId: string;
+      repositories: GithubRepository[];
+      reason: string;
+      available: false;
+      error: string;
+    }
+  | {
+      status: "unauthenticated";
+      requestId: string;
+      repositories: GithubRepository[];
+      available: false;
+      error: string;
+    }
+  | {
+      status: "error";
+      requestId: string;
+      repositories: GithubRepository[];
+      available: boolean;
+      error: string;
+    };
+
+export interface ProjectGithubCloneResult {
+  requestId: string;
+  repo: string;
+  checkoutPath: string | null;
+  project: {
+    projectId: string;
+    projectKey?: string;
+    projectDisplayName: string;
+    projectRootPath: string;
+    projectKind: string;
+  } | null;
+  error: string | null;
+}
+
+export interface DirectorySuggestionEntry {
+  path: string;
+  kind: "file" | "directory";
+}
+
+export interface DirectorySuggestionsResult {
+  directories: string[];
+  entries?: DirectorySuggestionEntry[];
+  error: string | null;
+  requestId: string;
+}
