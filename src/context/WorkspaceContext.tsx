@@ -168,6 +168,10 @@ interface WorkspaceContextType {
   // Subagents
   providerSubagents: Record<string, SubagentInfo>;
   getSubagentInfo: (toolCallId: string, item?: ToolCallTimelineItem) => SubagentInfo | null;
+
+  // View Mode
+  summaryMode: boolean;
+  setSummaryMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -318,6 +322,21 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Subagents
   const [providerSubagents, setProviderSubagents] = useState<Record<string, SubagentInfo>>({});
+
+  // Summary Mode
+  const [summaryMode, setSummaryMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("amble-summary-mode") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("amble-summary-mode", String(summaryMode));
+    } catch {}
+  }, [summaryMode]);
 
   const [activeTabTarget, setActiveTabTarget] = useState<{
     kind: ActiveTabKind;
@@ -2359,6 +2378,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
         providerSubagents,
         getSubagentInfo,
+
+        summaryMode,
+        setSummaryMode,
       }}
     >
       {children}

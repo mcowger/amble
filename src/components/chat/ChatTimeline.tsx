@@ -8,6 +8,7 @@ import { ToolCallItem } from "./ToolCallItem";
 import { TodoBlock } from "./TodoBlock";
 import { CompactionMarker } from "./CompactionMarker";
 import { PendingPermissionCard } from "./PendingPermissionCard";
+import { SummaryTurnCard } from "./SummaryTurnCard";
 import {
   Sparkles,
   ArrowDown,
@@ -17,7 +18,28 @@ import {
   Search,
   Loader2,
 } from "lucide-react";
-import type { TimelineItem } from "../../lib/paseo/types";
+import type {
+  TimelineItem,
+  UserMessageTimelineItem,
+  ToolCallTimelineItem,
+  ReasoningTimelineItem,
+  AssistantMessageTimelineItem,
+  TodoTimelineItem,
+  CompactionTimelineItem,
+  ErrorTimelineItem,
+} from "../../lib/paseo/types";
+
+interface TurnGroup {
+  id: string;
+  userMessage?: UserMessageTimelineItem;
+  toolCalls: ToolCallTimelineItem[];
+  reasonings: ReasoningTimelineItem[];
+  todos: TodoTimelineItem[];
+  compactions: CompactionTimelineItem[];
+  errors: ErrorTimelineItem[];
+  assistantMessages: AssistantMessageTimelineItem[];
+  isCurrentRunningTurn: boolean;
+}
 
 export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: string) => void }) {
   const {
@@ -29,6 +51,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     activeAgentId,
     pendingPermissions,
     respondToPermission,
+    summaryMode,
   } = useWorkspace();
 
   const agentPendingPermissions = useMemo(() => {
@@ -67,6 +90,95 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
       prevLatestReasoningIdxRef.current = latestReasoningIndex;
     }
   }, [latestReasoningIndex]);
+
+  // Group timeline items into conversation turns for Summary Mode
+  const turnGroups = useMemo<TurnGroup[]>(() => {
+    if (!summaryMode) return [];
+
+    const groups: TurnGroup[] = [];
+    let currentGroup: TurnGroup = {
+      id: "group-0",
+      toolCalls: [],
+      reasonings: [],
+      todos: [],
+      compactions: [],
+      errors: [],
+      assistantMessages: [],
+      isCurrentRunningTurn: false,
+    };
+
+    for (let i = 0; i < timeline.length; i++) {
+      const item = timeline[i];
+      if (!item) continue;
+
+      if (item.type === "user_message") {
+        if (
+          currentGroup.userMessage ||
+          currentGroup.toolCalls.length > 0 ||
+          currentGroup.reasonings.length > 0 ||
+          currentGroup.todos.length > 0 ||
+          currentGroup.compactions.length > 0 ||
+          currentGroup.errors.length > 0 ||
+          currentGroup.assistantMessages.length > 0
+        ) {
+          groups.push(currentGroup);
+        }
+        currentGroup = {
+          id: `turn-${i}`,
+          userMessage: item,
+          toolCalls: [],
+          reasonings: [],
+          todos: [],
+          compactions: [],
+          errors: [],
+          assistantMessages: [],
+          isCurrentRunningTurn: false,
+        };
+      } else {
+        switch (item.type) {
+          case "tool_call":
+            currentGroup.toolCalls.push(item);
+            break;
+          case "reasoning":
+            currentGroup.reasonings.push(item);
+            break;
+          case "todo":
+            currentGroup.todos.push(item);
+            break;
+          case "compaction":
+            currentGroup.compactions.push(item);
+            break;
+          case "error":
+            currentGroup.errors.push(item);
+            break;
+          case "assistant_message":
+            currentGroup.assistantMessages.push(item);
+            break;
+        }
+      }
+    }
+
+    if (
+      currentGroup.userMessage ||
+      currentGroup.toolCalls.length > 0 ||
+      currentGroup.reasonings.length > 0 ||
+      currentGroup.todos.length > 0 ||
+      currentGroup.compactions.length > 0 ||
+      currentGroup.errors.length > 0 ||
+      currentGroup.assistantMessages.length > 0
+    ) {
+      groups.push(currentGroup);
+    }
+
+    if (isTurnRunning && groups.length > 0) {
+      const last = groups[groups.length - 1];
+      if (last) {
+        last.isCurrentRunningTurn = true;
+      }
+    }
+
+    return groups;
+  }, [timeline, summaryMode, isTurnRunning]);
 
   // Reset overrides and trigger session switch pinning when switching active agent / session
   useEffect(() => {
@@ -265,6 +377,69 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                 ))}
               </div>
             </div>
+          ) : summaryMode ? (
+            /* Summary Mode: Grouped turns */
+            turnGroups.map((group) => {
+              const hasActivity = group.toolCalls.length > 0 || group.reasonings.length > 0;
+              return (
+                <div key={group.id} className="space-y-3">
+                  {/* User Card */}
+                  {group.userMessage && <UserCard item={group.userMessage} />}
+
+                  {/* Compactions */}
+                  {group.compactions.map((compaction, cIdx) => (
+                    <CompactionMarker key={`comp-${cIdx}`} item={compaction} />
+                  ))}
+
+                  {/* Summary Card or Direct Assistant Message */}
+                  {hasActivity ? (
+                    <SummaryTurnCard
+                      toolCalls={group.toolCalls}
+                      reasonings={group.reasonings}
+                      assistantMessage={group.assistantMessages[0]}
+                      isCurrentRunningTurn={group.isCurrentRunningTurn}
+                      activeAgentCwd={activeAgent?.cwd}
+                    />
+                  ) : (
+                    group.assistantMessages.map((msg, mIdx) => (
+                      <AssistantMessage key={`msg-${mIdx}`} item={msg} />
+                    ))
+                  )}
+
+                  {/* Additional assistant messages if more than one in turn */}
+                  {hasActivity &&
+                    group.assistantMessages.slice(1).map((msg, mIdx) => (
+                      <AssistantMessage key={`extra-msg-${mIdx}`} item={msg} />
+                    ))}
+
+                  {/* In-flight indicator if no activity and running */}
+                  {!hasActivity &&
+                    group.isCurrentRunningTurn &&
+                    group.assistantMessages.length === 0 && (
+                      <div className="flex items-center gap-2.5 p-3 rounded-xl border border-border/40 bg-muted/20 text-xs text-muted-foreground animate-pulse select-none">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
+                        <span>Agent is working...</span>
+                      </div>
+                    )}
+
+                  {/* Todos */}
+                  {group.todos.map((todo, tIdx) => (
+                    <TodoBlock key={`todo-${tIdx}`} item={todo} />
+                  ))}
+
+                  {/* Errors */}
+                  {group.errors.map((err, eIdx) => (
+                    <div
+                      key={`err-${eIdx}`}
+                      className="my-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2 font-mono"
+                    >
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{err.message}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })
           ) : (
             /* Timeline items */
             timeline.map((item, index) => {

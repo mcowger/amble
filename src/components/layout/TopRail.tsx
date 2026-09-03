@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { useTheme } from "../../context/ThemeContext";
+import { cn } from "../../lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import { ContextUsagePill } from "./ContextUsagePill";
 import { SessionTokenDetailPill } from "./SessionTokenDetailPill";
@@ -13,6 +14,8 @@ import {
   Menu,
   Pencil,
   Check,
+  LayoutList,
+  ListCollapse,
 } from "lucide-react";
 
 interface TopRailProps {
@@ -29,6 +32,8 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
     thinkingEffort,
     createAgentTab,
     updateAgentTitle,
+    summaryMode,
+    setSummaryMode,
   } = useWorkspace();
 
   const { isDark, setTheme } = useTheme();
@@ -149,6 +154,24 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
 
         {/* Action icons */}
         <div className="flex items-center gap-0.5 border-l border-border/60 pl-1 sm:pl-2">
+          <button
+            onClick={() => setSummaryMode((prev) => !prev)}
+            className={cn(
+              "p-1 sm:p-1.5 rounded-md cursor-pointer transition-colors",
+              summaryMode
+                ? "bg-primary/10 text-primary hover:bg-primary/15"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent",
+            )}
+            title={summaryMode ? "Switch to Detailed View" : "Switch to Summary Mode"}
+            aria-label={summaryMode ? "Switch to Detailed View" : "Switch to Summary Mode"}
+          >
+            {summaryMode ? (
+              <ListCollapse className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            ) : (
+              <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            )}
+          </button>
+
           <button
             onClick={() => createAgentTab()}
             className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"

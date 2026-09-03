@@ -1,0 +1,294 @@
+import React, { useRef, useEffect, useMemo } from "react";
+import {
+  Terminal,
+  FileCode,
+  FileText,
+  Search,
+  Brain,
+  Loader2,
+  Wrench,
+  Code2,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
+import type {
+  ToolCallTimelineItem,
+  ReasoningTimelineItem,
+  AssistantMessageTimelineItem,
+} from "../../lib/paseo/types";
+import { formatDuration, formatRelativePath } from "../../lib/utils";
+import { extractFilePathFromDiff, resolveDiffStats } from "./diff-utils";
+import { AssistantMessage } from "./AssistantMessage";
+
+interface SummaryTurnCardProps {
+  toolCalls: ToolCallTimelineItem[];
+  reasonings: ReasoningTimelineItem[];
+  assistantMessage?: AssistantMessageTimelineItem;
+  isCurrentRunningTurn?: boolean;
+  activeAgentCwd?: string;
+}
+
+function getToolIcon(toolName: string) {
+  const lower = toolName.toLowerCase();
+  if (lower.includes("read") || lower.includes("glob") || lower.includes("cat")) {
+    return <FileText className="w-3.5 h-3.5 text-emerald-500 shrink-0" />;
+  }
+  if (lower.includes("edit") || lower.includes("write") || lower.includes("patch")) {
+    return <FileCode className="w-3.5 h-3.5 text-blue-500 shrink-0" />;
+  }
+  if (lower.includes("bash") || lower.includes("terminal") || lower.includes("exec") || lower.includes("sh")) {
+    return <Terminal className="w-3.5 h-3.5 text-amber-500 shrink-0" />;
+  }
+  if (lower.includes("search") || lower.includes("grep") || lower.includes("find")) {
+    return <Search className="w-3.5 h-3.5 text-purple-500 shrink-0" />;
+  }
+  return <Code2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
+}
+
+export function SummaryTurnCard({
+  toolCalls,
+  reasonings,
+  assistantMessage,
+  isCurrentRunningTurn = false,
+  activeAgentCwd,
+}: SummaryTurnCardProps) {
+  const thoughtScrollRef = useRef<HTMLDivElement>(null);
+
+  // Aggregate tool call counts and statuses
+  const { toolStats, modifiedFiles, totalToolsCount } = useMemo(() => {
+    const statsMap = new Map<
+      string,
+      { count: number; running: number; failed: number }
+    >();
+    const filesMap = new Map<string, { additions: number; deletions: number }>();
+
+    for (const call of toolCalls) {
+      const rawName = call.tool || call.name || "tool";
+      const name = rawName.toLowerCase();
+      const current = statsMap.get(name) || { count: 0, running: 0, failed: 0 };
+      current.count += 1;
+      if (call.status === "running") current.running += 1;
+      if (call.status === "failed") current.failed += 1;
+      statsMap.set(name, current);
+
+      // Extract file path if available
+      let filePath = call.filePath;
+      if (!filePath && call.input && typeof call.input === "object") {
+        const inputObj = call.input as Record<string, unknown>;
+        if (typeof inputObj.filePath === "string") filePath = inputObj.filePath;
+        else if (typeof inputObj.path === "string") filePath = inputObj.path;
+      }
+      if (!filePath && typeof call.diff === "string") {
+        filePath = extractFilePathFromDiff(call.diff);
+      }
+
+      if (filePath) {
+        const normPath = formatRelativePath(filePath, activeAgentCwd);
+        const stats = resolveDiffStats({
+          diffText: typeof call.diff === "string" ? call.diff : undefined,
+          additions: call.additions,
+          deletions: call.deletions,
+        });
+
+        const fileEntry = filesMap.get(normPath) || { additions: 0, deletions: 0 };
+        if (stats) {
+          fileEntry.additions += stats.additions;
+          fileEntry.deletions += stats.deletions;
+        }
+        filesMap.set(normPath, fileEntry);
+      }
+    }
+
+    const sortedStats = Array.from(statsMap.entries())
+      .map(([tool, data]) => ({
+        tool,
+        ...data,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const sortedFiles = Array.from(filesMap.entries())
+      .map(([path, stats]) => ({
+        path,
+        ...stats,
+      }))
+      .sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions));
+
+    return {
+      toolStats: sortedStats,
+      modifiedFiles: sortedFiles,
+      totalToolsCount: toolCalls.length,
+    };
+  }, [toolCalls, activeAgentCwd]);
+
+  // Combined thoughts and duration
+  const { combinedThoughtText, isStreamingReasoning, totalReasoningDurationMs } = useMemo(() => {
+    let text = "";
+    let isStreaming = false;
+    let totalMs = 0;
+
+    for (const r of reasonings) {
+      if (r.text) {
+        if (text) text += "\n\n";
+        text += r.text.trim();
+      }
+      if (r.isStreaming) isStreaming = true;
+      if (r.durationMs) totalMs += r.durationMs;
+      else if (r.startedAt && r.isStreaming) {
+        totalMs += Math.max(0, Date.now() - r.startedAt);
+      }
+    }
+
+    return {
+      combinedThoughtText: text,
+      isStreamingReasoning: isStreaming,
+      totalReasoningDurationMs: totalMs,
+    };
+  }, [reasonings]);
+
+  // Auto-scroll thought mini console when streaming
+  useEffect(() => {
+    if (thoughtScrollRef.current) {
+      thoughtScrollRef.current.scrollTop = thoughtScrollRef.current.scrollHeight;
+    }
+  }, [combinedThoughtText, isStreamingReasoning]);
+
+  return (
+    <div className="my-3 space-y-3">
+      {/* 2-Column Summary Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Left Column: Tools Summary */}
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none">
+            <div className="flex items-center gap-1.5">
+              <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>tools</span>
+            </div>
+            <span className="text-[11px] font-mono text-muted-foreground font-normal">
+              {totalToolsCount} {totalToolsCount === 1 ? "call" : "calls"}
+            </span>
+          </div>
+
+          {/* Tool counts */}
+          <div className="py-2 space-y-1.5 flex-1">
+            {toolStats.length === 0 ? (
+              <div className="text-xs text-muted-foreground italic py-1">
+                No tool calls executed
+              </div>
+            ) : (
+              toolStats.map((stat) => (
+                <div
+                  key={stat.tool}
+                  className="flex items-center justify-between text-xs font-mono"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {getToolIcon(stat.tool)}
+                    <span className="text-foreground truncate">{stat.tool}:</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {stat.running > 0 && (
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-500" />
+                    )}
+                    {stat.failed > 0 && (
+                      <span className="text-[10px] text-destructive flex items-center gap-0.5">
+                        <AlertCircle className="w-2.5 h-2.5" />
+                        {stat.failed}
+                      </span>
+                    )}
+                    <span className="font-semibold text-foreground">{stat.count}x</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Touched / Modified files */}
+          {modifiedFiles.length > 0 && (
+            <div className="pt-2 border-t border-border/30 mt-auto select-none">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">
+                Touched Files ({modifiedFiles.length})
+              </div>
+              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                {modifiedFiles.map((file) => (
+                  <div
+                    key={file.path}
+                    className="flex items-center justify-between text-[11px] font-mono gap-2"
+                  >
+                    <span
+                      className="text-foreground/85 truncate"
+                      title={file.path}
+                    >
+                      {file.path}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0 text-[10px]">
+                      {file.additions > 0 && (
+                        <span className="text-emerald-500 font-semibold">
+                          +{file.additions}
+                        </span>
+                      )}
+                      {file.deletions > 0 && (
+                        <span className="text-red-500 font-semibold">
+                          -{file.deletions}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Thought Log Mini Console */}
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none">
+            <div className="flex items-center gap-1.5">
+              <Brain className="w-3.5 h-3.5 text-blue-500" />
+              <span>thought log</span>
+            </div>
+            {isStreamingReasoning ? (
+              <div className="flex items-center gap-1 text-[11px] text-amber-500 font-mono">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>thinking</span>
+              </div>
+            ) : totalReasoningDurationMs > 0 ? (
+              <span className="text-[11px] font-mono text-muted-foreground font-normal">
+                {formatDuration(totalReasoningDurationMs)}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Monospace Scrolling Console */}
+          <div
+            ref={thoughtScrollRef}
+            className="mt-2 flex-1 max-h-52 overflow-y-auto overflow-x-hidden font-mono text-[11px] leading-relaxed bg-background/60 rounded-md p-2.5 border border-border/30 text-muted-foreground select-text"
+          >
+            {combinedThoughtText ? (
+              <div className="whitespace-pre-wrap break-words">
+                {combinedThoughtText}
+              </div>
+            ) : isStreamingReasoning ? (
+              <div className="flex items-center gap-2 italic text-muted-foreground">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-500 shrink-0" />
+                <span>Processing thoughts...</span>
+              </div>
+            ) : (
+              <div className="italic text-muted-foreground/60">
+                No reasoning trace recorded.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom: Assistant Response or Working Status */}
+      {assistantMessage ? (
+        <AssistantMessage item={assistantMessage} />
+      ) : isCurrentRunningTurn ? (
+        <div className="flex items-center gap-2.5 p-3 rounded-xl border border-border/40 bg-muted/20 text-xs text-muted-foreground animate-pulse select-none">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500 shrink-0" />
+          <span>Agent is executing...</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
