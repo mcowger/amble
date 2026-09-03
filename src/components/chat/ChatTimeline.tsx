@@ -36,9 +36,12 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
   }, [pendingPermissions, activeAgentId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const initialScrollDoneRef = useRef<string | null>(null);
   const prevTimelineLengthRef = useRef<number>(0);
+  const isPinnedToBottomRef = useRef<boolean>(true);
+  const prevIsTurnRunningRef = useRef<boolean>(isTurnRunning);
 
   // Track user manual expansion overrides per reasoning item index
   const [userReasoningOverrides, setUserReasoningOverrides] = useState<Record<number, boolean>>({});
@@ -70,7 +73,26 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     prevLatestReasoningIdxRef.current = -1;
     isSwitchingSessionRef.current = true;
     initialScrollDoneRef.current = null;
+    isPinnedToBottomRef.current = true;
   }, [activeAgentId]);
+
+  // Observe inner content container resizes to keep bottom pinned when code blocks,
+  // images, syntax highlighting, or new streaming tokens expand the timeline height
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      if (isSwitchingSessionRef.current) return;
+
+      if (isPinnedToBottomRef.current && scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Instant scroll to bottom on initial load / session switch (no animation)
   useLayoutEffect(() => {
@@ -82,6 +104,8 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     if (isNewSession) {
       initialScrollDoneRef.current = currentAgentKey;
       isSwitchingSessionRef.current = true;
+      isPinnedToBottomRef.current = true;
+      setShowScrollBottom(false);
       if (switchSettleTimeoutRef.current) {
         clearTimeout(switchSettleTimeoutRef.current);
       }
@@ -118,18 +142,38 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
       return;
     }
 
-    // For active streaming / new messages during the current session:
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 160;
+    const wasRunning = prevIsTurnRunningRef.current;
+    prevIsTurnRunningRef.current = isTurnRunning;
+    const isTurnCompleted = wasRunning && !isTurnRunning;
 
-    if (
-      isNearBottom ||
-      agentPendingPermissions.length > 0
-    ) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
+    const lastItem = timeline[timeline.length - 1];
+    if (lastItem?.type === "user_message" || agentPendingPermissions.length > 0) {
+      isPinnedToBottomRef.current = true;
+    }
+
+    // If user is pinned to bottom OR a turn has just completed:
+    if (isPinnedToBottomRef.current || isTurnCompleted) {
+      if (isTurnCompleted) {
+        isPinnedToBottomRef.current = true;
+      }
+
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+
+      // Consecutive frame settling to ensure code blocks and syntax-highlighted blocks are fully scrolled
+      const frame1 = requestAnimationFrame(() => {
+        if (scrollRef.current && isPinnedToBottomRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+        const frame2 = requestAnimationFrame(() => {
+          if (scrollRef.current && isPinnedToBottomRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        });
       });
+
+      return () => {
+        cancelAnimationFrame(frame1);
+      };
     }
 
     prevTimelineLengthRef.current = timeline.length;
@@ -138,11 +182,22 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
   const handleScroll = () => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const isUp = scrollHeight - scrollTop - clientHeight > 100;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const isUp = distanceFromBottom > 100;
     setShowScrollBottom(isUp);
+
+    // If user is near the bottom, keep them pinned.
+    // If they scrolled up > 100px, respect their position and don't auto-scroll.
+    if (distanceFromBottom <= 50) {
+      isPinnedToBottomRef.current = true;
+    } else if (distanceFromBottom > 100) {
+      isPinnedToBottomRef.current = false;
+    }
   };
 
   const scrollToBottomSmooth = () => {
+    isPinnedToBottomRef.current = true;
+    setShowScrollBottom(false);
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
@@ -167,7 +222,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
         className="flex-1 h-full min-h-0 w-full"
         viewportClassName="px-3 sm:px-4 md:px-8 py-4 sm:py-6"
       >
-        <div className="space-y-4 max-w-4xl w-full mx-auto min-w-0">
+        <div ref={contentRef} className="space-y-4 max-w-4xl w-full mx-auto min-w-0">
           {isTimelineLoading && timeline.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
