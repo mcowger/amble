@@ -17,8 +17,10 @@ import {
   Layers,
 } from "lucide-react";
 import { DiffViewer } from "./DiffViewer";
+import { SubagentCallItem } from "./SubagentCallItem";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { formatRelativePath, stripCwdFromText } from "../../lib/utils";
+import { isSubagentToolCall } from "../../lib/subagent-helpers";
 import type { ToolCallTimelineItem } from "../../lib/paseo/types";
 
 function formatContent(value: unknown): string {
@@ -374,6 +376,10 @@ function resolveToolOutput(item: ToolCallTimelineItem, cwd?: string): ResolvedOu
 }
 
 export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
+  if (isSubagentToolCall(item)) {
+    return <SubagentCallItem item={item} />;
+  }
+
   const [isExpanded, setIsExpanded] = useState(false);
   const { activeWorkspace, activeAgent } = useWorkspace();
   const cwd =

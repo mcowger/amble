@@ -23,6 +23,12 @@ import type {
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
+import {
+  type SubagentInfo,
+  type SubagentChildAction,
+  extractEmbeddedActions,
+  getSubagentDetails,
+} from "../lib/subagent-helpers";
 
 export type ActiveTabKind = "agent" | "terminal" | "changes";
 
@@ -113,6 +119,10 @@ interface WorkspaceContextType {
   setActiveTerminalSlot: (slot: number | null) => void;
   createTerminal: () => Promise<number | null>;
   refreshTerminals: (workspaceId?: string) => Promise<void>;
+
+  // Subagents
+  providerSubagents: Record<string, SubagentInfo>;
+  getSubagentInfo: (toolCallId: string, item?: ToolCallTimelineItem) => SubagentInfo | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -252,6 +262,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [gitStatus, setGitStatus] = useState<GitStatusSummary | null>(null);
   const [terminals, setTerminals] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalSlot, setActiveTerminalSlot] = useState<number | null>(null);
+
+  // Subagents
+  const [providerSubagents, setProviderSubagents] = useState<Record<string, SubagentInfo>>({});
 
   const [activeTabTarget, setActiveTabTarget] = useState<{
     kind: ActiveTabKind;
@@ -578,6 +591,74 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           }
           timelineCacheRef.current.set(id, items);
           setTimeline(items);
+
+          // Query provider subagents for this agent to populate historical child actions
+          client.listProviderSubagents(id).then(async (subRes) => {
+            if (activeTimelineFetchRef.current !== id) return;
+            if (subRes?.subagents && Array.isArray(subRes.subagents) && subRes.subagents.length > 0) {
+              for (const sub of subRes.subagents) {
+                try {
+                  const tl = await client.fetchProviderSubagentTimeline(id, sub.id);
+                  if (activeTimelineFetchRef.current !== id) return;
+                  const childActions: SubagentChildAction[] = [];
+                  if (tl?.rows && Array.isArray(tl.rows)) {
+                    for (const row of tl.rows) {
+                      if (row.item?.type === "tool_call") {
+                        const it = row.item;
+                        childActions.push({
+                          id: it.callId,
+                          tool: it.name || it.tool || "tool",
+                          status: it.status || "completed",
+                          title: it.title,
+                          filePath:
+                            it.filePath ||
+                            (it.input as any)?.filePath ||
+                            (it.detail as any)?.filePath ||
+                            (it.input as any)?.path,
+                          query:
+                            (it.input as any)?.query ||
+                            (it.input as any)?.pattern ||
+                            (it.detail as any)?.query ||
+                            (it.detail as any)?.pattern,
+                          command:
+                            (it.input as any)?.command ||
+                            (it.input as any)?.cmd ||
+                            (it.detail as any)?.command,
+                          summary: it.title || (it.detail as any)?.summary,
+                          input: it.input,
+                          output: it.output,
+                          exitCode: (it.detail as any)?.exitCode,
+                        });
+                      }
+                    }
+                  }
+
+                  setProviderSubagents((prev) => {
+                    const next = { ...prev };
+                    const subInfo: SubagentInfo = {
+                      id: sub.id,
+                      parentAgentId: id,
+                      toolCallId: sub.toolCallId || undefined,
+                      status: sub.status,
+                      title: sub.title || undefined,
+                      description: sub.description || undefined,
+                      subtitle: sub.subtitle || undefined,
+                      actions: childActions,
+                    };
+                    next[sub.id] = subInfo;
+                    if (sub.toolCallId) {
+                      next[sub.toolCallId] = subInfo;
+                    }
+                    return next;
+                  });
+                } catch (e) {
+                  console.warn("[WorkspaceProvider] fetchProviderSubagentTimeline error for subagent:", sub.id, e);
+                }
+              }
+            }
+          }).catch((err) => {
+            console.warn("[WorkspaceProvider] listProviderSubagents error:", err);
+          });
         } else {
           timelineCacheRef.current.set(id, []);
           setTimeline([]);
@@ -1142,6 +1223,146 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    const unsubSubagents = client.on("agent.provider_subagents.update", (rawPayload: any) => {
+      if (!rawPayload) return;
+      const payload = rawPayload.payload || rawPayload;
+      if (!payload || !payload.kind) return;
+
+      if (payload.kind === "upsert" && payload.subagent) {
+        const sub = payload.subagent;
+        setProviderSubagents((prev) => {
+          const next = { ...prev };
+          const existing = next[sub.id] || (sub.toolCallId ? next[sub.toolCallId] : undefined);
+          const isFinished = sub.status !== "running";
+          const updatedActions = (existing?.actions || []).map((a) =>
+            isFinished && a.status === "running"
+              ? { ...a, status: sub.status === "failed" ? ("failed" as const) : ("completed" as const) }
+              : a,
+          );
+          const updated: SubagentInfo = {
+            id: sub.id,
+            parentAgentId: sub.parentAgentId,
+            toolCallId: sub.toolCallId || existing?.toolCallId,
+            status: sub.status,
+            title: sub.title ?? existing?.title,
+            description: sub.description ?? existing?.description,
+            subtitle: sub.subtitle ?? existing?.subtitle,
+            subAgentType: existing?.subAgentType,
+            actions: updatedActions,
+            output: existing?.output,
+          };
+          next[sub.id] = updated;
+          if (sub.toolCallId) {
+            next[sub.toolCallId] = updated;
+          }
+          return next;
+        });
+      } else if (payload.kind === "timeline" && payload.item) {
+        const subId = payload.subagentId;
+        const item = payload.item;
+        if (item.type === "tool_call") {
+          const actionId =
+            item.callId || item.id || (item as any)?.toolCallId || (item as any)?.tool_call_id;
+          const childAction: SubagentChildAction = {
+            id: actionId,
+            tool: item.name || item.tool || "tool",
+            status: item.status || "completed",
+            title: item.title,
+            filePath:
+              item.filePath ||
+              (item.input as any)?.filePath ||
+              (item.detail as any)?.filePath ||
+              (item.input as any)?.path,
+            query:
+              (item.input as any)?.query ||
+              (item.input as any)?.pattern ||
+              (item.detail as any)?.query ||
+              (item.detail as any)?.pattern,
+            command:
+              (item.input as any)?.command ||
+              (item.input as any)?.cmd ||
+              (item.detail as any)?.command,
+            summary: item.title || (item.detail as any)?.summary,
+            input: item.input,
+            output: item.output,
+            exitCode: (item.detail as any)?.exitCode,
+          };
+
+          setProviderSubagents((prev) => {
+            const next = { ...prev };
+            const existing = next[subId];
+            if (!existing) {
+              const newSub: SubagentInfo = {
+                id: subId,
+                parentAgentId: payload.parentAgentId,
+                status: "running",
+                actions: [childAction],
+              };
+              next[subId] = newSub;
+              return next;
+            }
+
+            const currentActions = [...existing.actions];
+            let existingIndex = -1;
+            if (childAction.id) {
+              existingIndex = currentActions.findIndex((a) => a.id === childAction.id);
+            }
+            if (existingIndex === -1 && currentActions.length > 0) {
+              const lastIdx = currentActions.length - 1;
+              const last = currentActions[lastIdx]!;
+              const sameTool =
+                (last.tool || "").toLowerCase() === (childAction.tool || "").toLowerCase();
+              if (
+                sameTool &&
+                (last.status === "running" ||
+                  (!last.query && !last.filePath && !last.command) ||
+                  last.query === childAction.query ||
+                  last.filePath === childAction.filePath)
+              ) {
+                existingIndex = lastIdx;
+              }
+            }
+
+            if (existingIndex >= 0) {
+              const prevAction = currentActions[existingIndex]!;
+              currentActions[existingIndex] = {
+                ...prevAction,
+                ...childAction,
+                id: childAction.id || prevAction.id,
+                query: childAction.query || prevAction.query,
+                filePath: childAction.filePath || prevAction.filePath,
+                command: childAction.command || prevAction.command,
+                summary: childAction.summary || prevAction.summary,
+              };
+            } else {
+              currentActions.push(childAction);
+            }
+
+            const updated: SubagentInfo = {
+              ...existing,
+              actions: currentActions,
+            };
+            next[subId] = updated;
+            if (existing.toolCallId) {
+              next[existing.toolCallId] = updated;
+            }
+            return next;
+          });
+        }
+      } else if (payload.kind === "remove") {
+        const subId = payload.subagentId;
+        setProviderSubagents((prev) => {
+          const next = { ...prev };
+          const existing = next[subId];
+          delete next[subId];
+          if (existing?.toolCallId) {
+            delete next[existing.toolCallId];
+          }
+          return next;
+        });
+      }
+    });
+
     const unsubWorkspaceUpdate = client.on("workspace_update", () => {
       refreshWorkspaces();
     });
@@ -1151,6 +1372,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       unsubPermissionRequest();
       unsubPermissionResolved();
       unsubAgentUpdate();
+      unsubSubagents();
       unsubWorkspaceUpdate();
     };
   }, [client, activeAgentId, refreshAgents, refreshWorkspaces]);
@@ -1612,6 +1834,78 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const getSubagentInfo = useCallback(
+    (toolCallId: string, item?: ToolCallTimelineItem): SubagentInfo | null => {
+      const childSessionId =
+        (item?.detail as any)?.childSessionId || (item?.metadata as any)?.sessionId;
+      const live =
+        providerSubagents[toolCallId] ||
+        (childSessionId ? providerSubagents[childSessionId] : undefined);
+
+      const embeddedActions = item ? extractEmbeddedActions(item) : [];
+      const details = item
+        ? getSubagentDetails(item)
+        : { description: "", subAgentType: undefined };
+
+      if (!live && !item) return null;
+
+      const isFinished =
+        item?.status === "completed" ||
+        item?.status === "failed" ||
+        item?.status === "canceled" ||
+        (live && live.status !== "running");
+      const finalStatus =
+        item?.status === "completed" || item?.status === "failed" || item?.status === "canceled"
+          ? item.status
+          : live?.status || item?.status || "running";
+
+      if (live) {
+        const rawActions = live.actions.length > 0 ? live.actions : embeddedActions;
+        const normalizedActions = rawActions.map((a) =>
+          isFinished && a.status === "running"
+            ? { ...a, status: finalStatus === "failed" ? ("failed" as const) : ("completed" as const) }
+            : a,
+        );
+        return {
+          ...live,
+          status: finalStatus,
+          description: live.description || details.description,
+          subAgentType: live.subAgentType || details.subAgentType,
+          actions: normalizedActions,
+          output:
+            live.output ||
+            (typeof item?.output === "string"
+              ? item.output
+              : (item?.detail as any)?.log),
+        };
+      }
+
+      if (item) {
+        const normalizedActions = embeddedActions.map((a) =>
+          isFinished && a.status === "running"
+            ? { ...a, status: finalStatus === "failed" ? ("failed" as const) : ("completed" as const) }
+            : a,
+        );
+        return {
+          id: toolCallId,
+          parentAgentId: activeAgentId || "",
+          toolCallId,
+          status: finalStatus,
+          description: details.description,
+          subAgentType: details.subAgentType,
+          actions: normalizedActions,
+          output:
+            typeof item.output === "string"
+              ? item.output
+              : (item.detail as any)?.log,
+        };
+      }
+
+      return null;
+    },
+    [providerSubagents, activeAgentId],
+  );
+
   return (
     <WorkspaceContext.Provider
       value={{
@@ -1684,6 +1978,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setActiveTerminalSlot,
         createTerminal,
         refreshTerminals,
+
+        providerSubagents,
+        getSubagentInfo,
       }}
     >
       {children}
