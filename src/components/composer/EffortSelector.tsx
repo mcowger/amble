@@ -29,10 +29,10 @@ export function EffortSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex min-w-0 max-[380px]:w-[68px] max-[380px]:shrink-0 max-[380px]:gap-1 items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
+          className="flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
           title="Reasoning Effort"
         >
-          <Brain className="w-3.5 h-3.5 text-blue-500" />
+          <Brain className="w-3.5 h-3.5 text-blue-500 shrink-0" />
           <span className="min-w-0 truncate capitalize">{currentOption.label}</span>
           <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
         </button>

@@ -165,9 +165,9 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
         viewportRef={scrollRef}
         onScroll={handleScroll}
         className="flex-1 h-full min-h-0 w-full"
-        viewportClassName="px-4 md:px-8 py-6"
+        viewportClassName="px-3 sm:px-4 md:px-8 py-4 sm:py-6"
       >
-        <div className="space-y-4 max-w-4xl w-full mx-auto">
+        <div className="space-y-4 max-w-4xl w-full mx-auto min-w-0">
           {isTimelineLoading && timeline.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -286,7 +286,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
       {showScrollBottom && (
         <button
           onClick={scrollToBottomSmooth}
-          className="absolute bottom-4 right-8 p-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 cursor-pointer transition-all z-20"
+          className="absolute bottom-3 right-4 sm:bottom-4 sm:right-8 p-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 cursor-pointer transition-all z-20"
           title="Scroll to bottom"
         >
           <ArrowDown className="w-4 h-4" />

@@ -27,7 +27,7 @@ export function TodoBlock({ item }: { item: TodoTimelineItem }) {
                 <Circle className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
               )}
               <span
-                className={`leading-relaxed ${
+                className={`leading-relaxed min-w-0 flex-1 break-words [overflow-wrap:anywhere] ${
                   isDone
                     ? "line-through text-muted-foreground"
                     : inProgress

@@ -422,11 +422,11 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-accent/50 cursor-pointer select-none transition-colors"
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           {getToolIcon()}
-          <span className="font-semibold text-foreground font-mono">{toolName}</span>
+          <span className="font-semibold text-foreground font-mono shrink-0">{toolName}</span>
           {summaryText ? (
-            <span className="text-muted-foreground truncate font-mono text-[11px]">
+            <span className="text-muted-foreground truncate font-mono text-[11px] min-w-0 flex-1">
               {summaryText}
             </span>
           ) : null}
@@ -444,7 +444,7 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
 
       {/* Expanded Details / Diff / Input / Output */}
       {isExpanded ? (
-        <div className="p-3 border-t border-border bg-background/50 space-y-3">
+        <div className="p-3 border-t border-border bg-background/50 space-y-3 min-w-0 max-w-full overflow-hidden">
           {/* Diff Viewer for Edits / Patches */}
           {showDiff ? (
             <DiffViewer
@@ -457,21 +457,21 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
 
           {/* Input Details */}
           {showInput ? (
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                   Input
                 </span>
                 <CopyButton text={formattedInput} title="Copy input" />
               </div>
-              <pre className="p-2.5 rounded-lg bg-muted/40 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap select-text max-h-72">
+              <pre className="p-2.5 rounded-lg bg-muted/40 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap select-text max-h-72 break-all min-w-0 max-w-full">
                 {formattedInput}
               </pre>
             </div>
           ) : null}
 
           {/* Output / Result */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 min-w-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -498,7 +498,7 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
                 <span>Running...</span>
               </div>
             ) : formattedOutput ? (
-              <pre className="p-2.5 rounded-lg bg-muted/40 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap select-text max-h-96 overflow-y-auto">
+              <pre className="p-2.5 rounded-lg bg-muted/40 font-mono text-[11px] text-foreground overflow-x-auto whitespace-pre-wrap select-text max-h-96 overflow-y-auto break-all min-w-0 max-w-full">
                 {formattedOutput}
               </pre>
             ) : (
@@ -510,14 +510,14 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
 
           {/* Error */}
           {Boolean(item.error) ? (
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold text-destructive uppercase tracking-wider">
                   Error
                 </span>
                 <CopyButton text={formatContent(item.error)} title="Copy error" />
               </div>
-              <pre className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-[11px] font-mono overflow-x-auto whitespace-pre-wrap select-text">
+              <pre className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-[11px] font-mono overflow-x-auto whitespace-pre-wrap select-text break-all min-w-0 max-w-full">
                 {formatContent(item.error)}
               </pre>
             </div>

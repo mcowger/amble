@@ -23,7 +23,7 @@ const ScrollArea = React.forwardRef<
       ref={viewportRef}
       onScroll={onScroll}
       className={cn(
-        "h-full w-full rounded-[inherit] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "h-full w-full rounded-[inherit] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>div]:!block [&>div]:!w-full [&>div]:!min-w-0",
         viewportClassName
       )}
     >

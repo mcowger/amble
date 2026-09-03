@@ -49,7 +49,7 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
 
       {/* Message Text */}
       {item.text && (
-        <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+        <div className="text-sm leading-relaxed whitespace-pre-wrap text-foreground break-words [overflow-wrap:anywhere] min-w-0 max-w-full">
           {item.text}
         </div>
       )}

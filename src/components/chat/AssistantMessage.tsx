@@ -47,7 +47,7 @@ export function AssistantMessage({ item }: { item: AssistantMessageTimelineItem 
       </div>
 
       {/* Markdown Content */}
-      <div className="pl-7 pr-2">
+      <div className="pl-7 pr-1 sm:pr-2 min-w-0 max-w-full overflow-hidden">
         <MarkdownRenderer content={item.text} />
       </div>
     </div>

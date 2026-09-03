@@ -50,7 +50,7 @@ export function CodeBlock({ code, language, compact }: CodeBlockProps) {
   return (
     <div
       className={clsx(
-        "rounded-lg border border-border bg-muted/30 overflow-hidden font-mono",
+        "rounded-lg border border-border bg-muted/30 overflow-hidden font-mono min-w-0 max-w-full",
         compact ? "my-2 text-[11px]" : "my-3 text-xs",
       )}
     >
@@ -166,6 +166,7 @@ export function MarkdownRenderer({
         isThought
           ? "text-xs leading-relaxed text-muted-foreground"
           : "text-sm leading-relaxed text-foreground",
+        "min-w-0 max-w-full break-words [overflow-wrap:anywhere]",
         className,
       )}
     >
@@ -283,7 +284,7 @@ export function MarkdownRenderer({
             return (
               <code
                 className={clsx(
-                  "font-mono font-medium border",
+                  "font-mono font-medium border break-all [overflow-wrap:anywhere]",
                   isThought
                     ? "px-1.5 py-0.5 rounded bg-muted/60 text-[11px] text-foreground border-border/30"
                     : "px-1.5 py-0.5 rounded-md bg-muted text-[12px] text-foreground border-border/40",

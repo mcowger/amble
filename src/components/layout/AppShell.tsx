@@ -15,7 +15,7 @@ export function AppShell({ children, drawer }: AppShellProps) {
   const { drawerOpen } = useWorkspace();
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-full h-[100dvh] w-full max-w-full overflow-hidden bg-background text-foreground">
       {/* Sidebar for Desktop */}
       <div className="hidden md:flex h-full">
         <Sidebar onCloseMobile={() => setMobileSidebarOpen(false)} />

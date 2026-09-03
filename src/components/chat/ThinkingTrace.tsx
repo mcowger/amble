@@ -75,7 +75,7 @@ export function ThinkingTrace({
       {isExpanded && (
         <div
           ref={contentRef}
-          className="p-3 border-t border-border/40 bg-background/50 text-xs text-muted-foreground leading-relaxed max-h-80 overflow-y-auto"
+          className="p-3 border-t border-border/40 bg-background/50 text-xs text-muted-foreground leading-relaxed max-h-80 overflow-y-auto overflow-x-hidden min-w-0 max-w-full"
         >
           {text ? (
             <MarkdownRenderer content={text} variant="thought" />

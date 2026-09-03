@@ -456,7 +456,7 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
           <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5 select-none">
             Input
           </div>
-          <pre className="p-3 rounded-lg border border-border/60 bg-muted/40 font-mono text-[11px] text-foreground leading-relaxed overflow-x-auto max-h-60 whitespace-pre-wrap">
+          <pre className="p-3 rounded-lg border border-border/60 bg-muted/40 font-mono text-[11px] text-foreground leading-relaxed overflow-x-auto max-h-60 whitespace-pre-wrap break-all min-w-0 max-w-full">
             {detailJson}
           </pre>
         </div>

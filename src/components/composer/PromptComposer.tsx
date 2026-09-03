@@ -343,7 +343,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   };
 
   return (
-    <div className="relative max-w-4xl w-full mx-auto p-4 pt-0">
+    <div className="relative max-w-4xl w-full mx-auto p-2 sm:p-4 pt-0 min-w-0">
       {/* Popups */}
       {slashFilter !== null && (
         <SlashCommands
@@ -481,7 +481,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
+                  className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
                   title="Attach image (vision model active)"
                   aria-label="Attach image"
                 >
@@ -533,7 +533,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       <button
                         type="button"
                         disabled={!canChangeMode}
-                        className="md:hidden flex min-w-0 max-w-[88px] max-[380px]:w-[72px] max-[380px]:gap-0.5 max-[380px]:px-1 shrink-0 items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
+                        className="md:hidden flex min-w-0 max-w-[80px] shrink-0 items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
                         title={
                           canChangeMode
                             ? "Select agent mode"
@@ -592,12 +592,12 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           </div>
 
           {/* Right: Submit / Interrupt Action */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isTurnRunning ? (
               <button
                 type="button"
                 onClick={cancelTurn}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer shadow-xs transition-colors"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer shadow-xs transition-colors shrink-0"
                 title="Interrupt Agent Execution"
               >
                 <Square className="w-3.5 h-3.5 fill-current" />
@@ -608,7 +608,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 type="button"
                 onClick={handleSend}
                 disabled={!prompt.trim() && pendingImages.length === 0}
-                className={`p-2 rounded-xl text-xs font-medium cursor-pointer transition-all shadow-xs ${
+                className={`p-1.5 sm:p-2 rounded-xl text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 ${
                   prompt.trim() || pendingImages.length > 0
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"

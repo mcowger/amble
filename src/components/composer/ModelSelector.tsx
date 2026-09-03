@@ -58,12 +58,14 @@ export function ModelSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex min-w-0 w-[116px] max-[380px]:w-8 max-[380px]:shrink-0 max-[380px]:justify-center max-[380px]:px-1.5 md:w-auto items-center gap-1.5 px-2 py-1 md:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
-          title="Select Model"
+          className="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
+          title={`Select Model: ${current.displayName || current.name}`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span className="min-w-0 flex-1 truncate max-[380px]:hidden md:max-w-[140px]">{current.displayName || current.name}</span>
-          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0 max-[380px]:hidden" />
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">{current.displayName || current.name}</span>
+          </div>
+          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0 ml-1" />
         </button>
       </PopoverTrigger>
 
