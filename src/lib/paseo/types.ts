@@ -214,6 +214,13 @@ export interface AgentSnapshot {
   labels?: Record<string, string>;
 }
 
+export interface AgentSlashCommand {
+  name: string;
+  description: string;
+  argumentHint?: string;
+  kind?: "command" | "skill";
+}
+
 // Timeline items
 export interface UserMessageTimelineItem {
   type: "user_message";

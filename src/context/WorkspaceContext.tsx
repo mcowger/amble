@@ -18,6 +18,7 @@ import type {
   AgentPermissionResponse,
   AgentPermissionRequest,
   ImageAttachment,
+  AgentSlashCommand,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 
@@ -87,6 +88,10 @@ interface WorkspaceContextType {
   sendMessage: (text: string, attachments?: string[], images?: ImageAttachment[]) => Promise<void>;
   createSession: (initialPrompt?: string, targetWorkspaceId?: string, images?: ImageAttachment[]) => Promise<AgentSnapshot | null>;
   cancelTurn: () => Promise<void>;
+
+  // Slash Commands
+  commands: AgentSlashCommand[];
+  refreshCommands: (agentId?: string) => Promise<void>;
 
   // Drawer
   drawerOpen: boolean;
@@ -235,6 +240,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [isTurnRunning, setIsTurnRunning] = useState<boolean>(false);
 
   const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
+  const [commands, setCommands] = useState<AgentSlashCommand[]>([]);
 
   // Drawer
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
@@ -572,6 +578,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [client, activeAgentId],
   );
 
+  // Refresh slash commands for active agent
+  const refreshCommands = useCallback(
+    async (targetAgentId?: string) => {
+      const id = targetAgentId || activeAgentId;
+      if (!id || client.getState() !== "connected") {
+        setCommands([]);
+        return;
+      }
+      try {
+        const list = await client.listCommands(id);
+        setCommands(list);
+      } catch (err) {
+        console.warn("[WorkspaceProvider] listCommands error:", err);
+      }
+    },
+    [client, activeAgentId],
+  );
+
   // Refresh providers & models
   const refreshProviders = useCallback(async () => {
     if (client.getState() !== "connected") return;
@@ -697,12 +721,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (activeAgentId && connectionState === "connected") {
       refreshTimeline(activeAgentId);
+      refreshCommands(activeAgentId);
       client.setAgentTimelineSubscription([activeAgentId]).catch(console.warn);
       if (activeAgent) {
         setIsTurnRunning(activeAgent.status === "running");
       }
     }
-  }, [activeAgentId, connectionState, refreshTimeline, client, activeAgent]);
+  }, [activeAgentId, connectionState, refreshTimeline, refreshCommands, client, activeAgent]);
 
   // Poll agents while a turn is actively running to catch intermediate step token updates
   useEffect(() => {
@@ -1582,6 +1607,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         sendMessage,
         createSession,
         cancelTurn,
+
+        commands,
+        refreshCommands,
 
         drawerOpen,
         activeDrawerTab,

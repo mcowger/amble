@@ -24,6 +24,7 @@ import {
   GitCommit,
   Layers,
   Sparkles,
+  FileText,
   Search,
   Check,
   ChevronDown,
@@ -62,10 +63,15 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     refreshTimeline,
     gitStatus,
     isVisionCapable,
+    commands,
+    archiveAgentSession,
+    createAgentTab,
+    activeAgentId,
   } = useWorkspace();
 
   const [prompt, setPrompt] = useState(initialValue);
   const [slashFilter, setSlashFilter] = useState<string | null>(null);
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0);
   const [mentionFilter, setMentionFilter] = useState<string | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [pendingImages, setPendingImages] = useState<ImageAttachment[]>([]);
@@ -236,7 +242,165 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
   };
 
+  const getCommandIcon = (cmd: { name: string; kind?: string }) => {
+    if (cmd.kind === "skill") {
+      return <Sparkles className="w-3.5 h-3.5 text-amber-500" />;
+    }
+    const name = cmd.name.toLowerCase();
+    if (name === "compact" || name === "summarize") {
+      return <Layers className="w-3.5 h-3.5 text-purple-500" />;
+    }
+    if (name.includes("git") || name === "review") {
+      return <GitCommit className="w-3.5 h-3.5 text-blue-500" />;
+    }
+    if (name.includes("init")) {
+      return <FileText className="w-3.5 h-3.5 text-emerald-500" />;
+    }
+    if (name.includes("search") || name.includes("exa")) {
+      return <Search className="w-3.5 h-3.5 text-purple-500" />;
+    }
+    return <Terminal className="w-3.5 h-3.5 text-primary" />;
+  };
+
+  const modeSlashCommands: SlashCommandItem[] = canChangeMode
+    ? modes.map((m) => ({
+        name: m.id.toLowerCase(),
+        description: m.description || `Switch agent mode to ${m.name}`,
+        kind: "mode" as const,
+        icon: getModeIcon(m.id),
+        action: () => {
+          setSelectedMode(m.id);
+          setPrompt("");
+          setSlashFilter(null);
+        },
+      }))
+    : [];
+
+  const providerSlashCommands: SlashCommandItem[] = (commands || []).map((cmd) => ({
+    name: cmd.name,
+    description: cmd.description,
+    argumentHint: cmd.argumentHint,
+    kind: cmd.kind || "command",
+    icon: getCommandIcon(cmd),
+    action: () => {
+      setPrompt(`/${cmd.name} `);
+      setSlashFilter(null);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    },
+  }));
+
+  const localActionCommands: SlashCommandItem[] = [
+    {
+      name: "terminal",
+      description: "Open integrated terminal drawer",
+      kind: "action",
+      icon: <Terminal className="w-3.5 h-3.5 text-amber-500" />,
+      action: () => {
+        toggleDrawer("terminal");
+        setPrompt("");
+        setSlashFilter(null);
+      },
+    },
+    {
+      name: "git",
+      description: "Open git changes and diff inspector",
+      kind: "action",
+      icon: <GitCommit className="w-3.5 h-3.5 text-blue-500" />,
+      action: () => {
+        toggleDrawer("changes");
+        setPrompt("");
+        setSlashFilter(null);
+      },
+    },
+    {
+      name: "clear",
+      description: "Archive this agent and start a fresh draft",
+      kind: "action",
+      icon: <Eraser className="w-3.5 h-3.5 text-rose-500" />,
+      action: async () => {
+        setPrompt("");
+        setSlashFilter(null);
+        if (activeAgentId) {
+          await archiveAgentSession(activeAgentId);
+          await createAgentTab();
+        }
+      },
+    },
+    {
+      name: "exit",
+      description: "Archive the current agent",
+      kind: "action",
+      icon: <Eraser className="w-3.5 h-3.5 text-rose-500" />,
+      action: async () => {
+        setPrompt("");
+        setSlashFilter(null);
+        if (activeAgentId) {
+          await archiveAgentSession(activeAgentId);
+        }
+      },
+    },
+  ];
+
+  // Merge commands, prioritizing provider commands & skills
+  const slashCommands: SlashCommandItem[] = [];
+  const seenNames = new Set<string>();
+
+  for (const cmd of [...providerSlashCommands, ...modeSlashCommands, ...localActionCommands]) {
+    const key = cmd.name.toLowerCase();
+    if (!seenNames.has(key)) {
+      seenNames.add(key);
+      slashCommands.push(cmd);
+    }
+  }
+
+  const filteredSlashCommands =
+    slashFilter !== null
+      ? slashCommands.filter(
+          (c) =>
+            c.name.toLowerCase().includes(slashFilter.toLowerCase()) ||
+            c.description.toLowerCase().includes(slashFilter.toLowerCase()),
+        )
+      : [];
+
+  useEffect(() => {
+    setSelectedSlashIndex(0);
+  }, [slashFilter]);
+
+  const handleSlashSelect = (cmd: SlashCommandItem) => {
+    cmd.action();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashFilter !== null && filteredSlashCommands.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedSlashIndex((prev) => (prev + 1) % filteredSlashCommands.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedSlashIndex(
+          (prev) => (prev - 1 + filteredSlashCommands.length) % filteredSlashCommands.length,
+        );
+        return;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        const picked = filteredSlashCommands[selectedSlashIndex];
+        if (picked) {
+          handleSlashSelect(picked);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSlashFilter(null);
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -269,57 +433,6 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     }
   };
 
-  const modeSlashCommands: SlashCommandItem[] = canChangeMode
-    ? modes.map((m) => ({
-        name: m.id.toLowerCase(),
-        description: m.description || `Switch agent mode to ${m.name}`,
-        icon: getModeIcon(m.id),
-        action: () => {
-          setSelectedMode(m.id);
-          setPrompt("");
-          setSlashFilter(null);
-        },
-      }))
-    : [];
-
-  const slashCommands: SlashCommandItem[] = [
-    ...modeSlashCommands,
-    {
-      name: "terminal",
-      description: "Open integrated terminal drawer",
-      icon: <Terminal className="w-3.5 h-3.5 text-amber-500" />,
-      action: () => {
-        toggleDrawer("terminal");
-        setPrompt("");
-        setSlashFilter(null);
-      },
-    },
-    {
-      name: "git",
-      description: "Open git changes and diff inspector",
-      icon: <GitCommit className="w-3.5 h-3.5 text-blue-500" />,
-      action: () => {
-        toggleDrawer("changes");
-        setPrompt("");
-        setSlashFilter(null);
-      },
-    },
-    {
-      name: "clear",
-      description: "Refresh and reset session view",
-      icon: <Eraser className="w-3.5 h-3.5 text-rose-500" />,
-      action: () => {
-        refreshTimeline();
-        setPrompt("");
-        setSlashFilter(null);
-      },
-    },
-  ];
-
-  const handleSlashSelect = (cmd: SlashCommandItem) => {
-    cmd.action();
-  };
-
   const currentMode = modes.find((mode) => mode.id === selectedMode) || modes[0];
 
   const sampleFiles = [
@@ -350,6 +463,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           filter={slashFilter}
           onSelect={handleSlashSelect}
           commands={slashCommands}
+          selectedIndex={selectedSlashIndex}
         />
       )}
 

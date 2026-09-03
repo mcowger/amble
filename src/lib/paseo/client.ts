@@ -19,6 +19,7 @@ import type {
   GitStatusSummary,
   AgentPermissionResponse,
   ImageAttachment,
+  AgentSlashCommand,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -132,6 +133,8 @@ export class PaseoClient {
         this.emit("agent_permission_request", payload);
       } else if (event.type === "agent_permission_resolved") {
         this.emit("agent_permission_resolved", payload);
+      } else if (event.type === "agent.provider_subagents.update") {
+        this.emit("agent.provider_subagents.update", payload);
       } else if (event.type === "status" && (payload as any)?.status === "server_info") {
         this.emit("server_info", payload);
       }
@@ -378,12 +381,13 @@ export class PaseoClient {
   }
 
   public async fetchAgents(
-    options?: { workspaceId?: string; scope?: "active" | "all" } | string,
+    options?: { workspaceId?: string; scope?: "active" | "all"; sort?: any } | string,
   ): Promise<any> {
     const opts = typeof options === "string" ? { workspaceId: options } : options;
     const scope = opts?.scope ?? "active";
     const res = await this.daemon.fetchAgents({
       scope: scope === "all" ? undefined : "active",
+      sort: opts?.sort ?? [{ key: "created_at", direction: "asc" }],
       subscribe: { subscriptionId: "amble-agent-updates" },
     });
     const workspaceId = opts?.workspaceId;
@@ -404,6 +408,53 @@ export class PaseoClient {
 
   public async fetchAgentTimeline(agentId: string): Promise<{ entries: any[] }> {
     return this.daemon.fetchAgentTimeline(agentId);
+  }
+
+  public async listProviderSubagents(parentAgentId: string): Promise<{ subagents: any[] }> {
+    try {
+      if (typeof (this.daemon as any).listProviderSubagents === "function") {
+        return await (this.daemon as any).listProviderSubagents(parentAgentId);
+      }
+      return { subagents: [] };
+    } catch (err) {
+      console.warn("[PaseoClient] listProviderSubagents error:", err);
+      return { subagents: [] };
+    }
+  }
+
+  public async fetchProviderSubagentTimeline(
+    parentAgentId: string,
+    subagentId: string,
+    options?: any,
+  ): Promise<{ rows: any[] }> {
+    try {
+      if (typeof (this.daemon as any).fetchProviderSubagentTimeline === "function") {
+        return await (this.daemon as any).fetchProviderSubagentTimeline(
+          parentAgentId,
+          subagentId,
+          options,
+        );
+      }
+      return { rows: [] };
+    } catch (err) {
+      console.warn("[PaseoClient] fetchProviderSubagentTimeline error:", err);
+      return { rows: [] };
+    }
+  }
+
+  public async listCommands(
+    options?: { agentId?: string; draftConfig?: any; timeout?: number } | string,
+  ): Promise<AgentSlashCommand[]> {
+    const opts = typeof options === "string" ? { agentId: options } : options;
+    const agentId = opts?.agentId || "";
+    if (!agentId) return [];
+    try {
+      const res = await this.daemon.listCommands({ ...opts, agentId });
+      return (res?.commands as AgentSlashCommand[]) || [];
+    } catch (err) {
+      console.warn("[PaseoClient] listCommands error:", err);
+      return [];
+    }
   }
 
   public async createAgent(params: {
