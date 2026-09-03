@@ -62,7 +62,11 @@ interface ResolvedInput {
   newString?: string;
 }
 
-function resolveToolInput(item: ToolCallTimelineItem, cwd?: string): ResolvedInput {
+function resolveToolInput(
+  item: ToolCallTimelineItem,
+  cwd?: string,
+  outputContent?: string,
+): ResolvedInput {
   const detail = (item.detail || {}) as Record<string, any>;
   const meta = (item.metadata || {}) as Record<string, any>;
   const rawName = (item.name || item.tool || "").toLowerCase();
@@ -143,14 +147,73 @@ function resolveToolInput(item: ToolCallTimelineItem, cwd?: string): ResolvedInp
     rawName === "glob" ||
     rawName === "search"
   ) {
-    const q =
+    const rawPath =
+      detail.path ||
+      (item.input as any)?.path ||
+      (item.input as any)?.directory ||
+      (item.input as any)?.dir ||
+      (item.input as any)?.cwd ||
+      (item.input as any)?.pathPrefix;
+    const include =
+      detail.include ||
+      (item.input as any)?.include ||
+      (item.input as any)?.glob ||
+      (item.input as any)?.filePattern;
+    const query =
       detail.query ||
       detail.pattern ||
       (item.input as any)?.query ||
       (item.input as any)?.pattern ||
-      item.input ||
+      (typeof item.input === "string" ? item.input : undefined) ||
       meta.query;
-    return { type: "search", content: q };
+
+    let path = rawPath ? formatRelativePath(rawPath, cwd) : undefined;
+    if (!path && typeof outputContent === "string") {
+      const match = outputContent.match(/(?:^|\n)([\w./-]+\.\w+):(?:\s*\n|\s*\d+:)/);
+      if (match && match[1]) {
+        path = formatRelativePath(match[1], cwd);
+      }
+    }
+
+    let content: unknown;
+    if (path || include) {
+      const parts: string[] = [];
+      if (query) parts.push(`pattern: ${query}`);
+      if (path) parts.push(`path: ${path}`);
+      if (include) parts.push(`include: ${include}`);
+      if (typeof item.input === "object" && item.input !== null) {
+        for (const [k, v] of Object.entries(item.input)) {
+          if (
+            ![
+              "pattern",
+              "query",
+              "q",
+              "path",
+              "directory",
+              "dir",
+              "cwd",
+              "pathPrefix",
+              "include",
+              "glob",
+              "filePattern",
+            ].includes(k)
+          ) {
+            parts.push(`${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
+          }
+        }
+      }
+      content = parts.join("\n");
+    } else if (typeof item.input === "object" && item.input !== null) {
+      content = item.input;
+    } else {
+      content = query || item.input;
+    }
+
+    return {
+      type: "search",
+      content,
+      filePath: path,
+    };
   }
 
   // 6. Sub Agent / Task
@@ -319,8 +382,8 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
     activeWorkspace?.path;
 
   const toolName = item.name || item.tool || "tool";
-  const inputInfo = resolveToolInput(item, cwd);
   const outputInfo = resolveToolOutput(item, cwd);
+  const inputInfo = resolveToolInput(item, cwd, outputInfo.content);
 
   const formattedInput = formatContent(inputInfo.content);
   const formattedOutput = outputInfo.content ? formatContent(outputInfo.content) : undefined;
@@ -387,6 +450,24 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
   const getToolSummary = (): string | undefined => {
     if (item.title && item.title !== toolName) {
       return formatRelativePath(item.title, cwd);
+    }
+
+    if (inputInfo.type === "search") {
+      const query =
+        (item.detail as any)?.query ||
+        (item.detail as any)?.pattern ||
+        (item.input as any)?.query ||
+        (item.input as any)?.pattern;
+      const path = inputInfo.filePath;
+      if (query && path) {
+        return `${query} in ${path}`;
+      }
+      if (path) {
+        return `in ${path}`;
+      }
+      if (query) {
+        return query;
+      }
     }
 
     const input = inputInfo.content;
