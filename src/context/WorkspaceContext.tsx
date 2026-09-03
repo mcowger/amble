@@ -38,6 +38,7 @@ import {
   findMatchingAttachment,
   matchesUserMessageItem,
 } from "../lib/attachmentStore";
+import { chooseDefaultWorkspace, resolveWorkspaceTarget } from "../lib/workspace-target";
 
 export type ActiveTabKind = "agent" | "terminal" | "changes";
 
@@ -252,6 +253,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(null);
   const activeWorkspaceIdRef = useRef<string | null>(null);
   activeWorkspaceIdRef.current = activeWorkspaceId;
+  const workspacesRef = useRef<WorkspaceItem[]>([]);
+  const projectsRef = useRef<ProjectItem[]>([]);
+  const workspaceDataLoadedRef = useRef(false);
+  const workspaceRefreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const [allAgents, setAllAgents] = useState<AgentSnapshot[]>([]);
   const [agents, setAgents] = useState<AgentSnapshot[]>([]);
@@ -304,6 +309,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Keep activeWorkspaceId in sync whenever activeAgent belongs to a specific workspace
   useEffect(() => {
     if (activeAgent?.workspaceId && activeAgent.workspaceId !== activeWorkspaceId) {
+      activeWorkspaceIdRef.current = activeAgent.workspaceId;
       setActiveWorkspaceIdState(activeAgent.workspaceId);
     }
   }, [activeAgent?.workspaceId, activeWorkspaceId]);
@@ -429,9 +435,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [activeAgentId, timeline]);
 
   // Refresh workspaces
-  const refreshWorkspaces = useCallback(async () => {
-    if (client.getState() !== "connected") return;
-    try {
+  const refreshWorkspaces = useCallback(() => {
+    if (client.getState() !== "connected") return Promise.resolve();
+    if (workspaceRefreshPromiseRef.current) return workspaceRefreshPromiseRef.current;
+
+    const refreshPromise = (async () => {
+      try {
       const [res, prjRes] = await Promise.all([
         client.fetchWorkspaces().catch(() => null),
         client.listProjects().catch(() => null),
@@ -500,25 +509,35 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      setProjects(Array.from(projectMap.values()));
+      const nextProjects = Array.from(projectMap.values());
+      projectsRef.current = nextProjects;
+      setProjects(nextProjects);
 
       if (list.length > 0) {
+        workspacesRef.current = list;
         setWorkspaces(list);
-        if (!activeWorkspaceId) {
-          const tmp = list.find(
-            (w) =>
-              w.name.toLowerCase() === "tmp" ||
-              w.path.endsWith("/tmp") ||
-              w.id.includes("tmp"),
-          );
-          const chosen = tmp ? tmp.id : list[0]!.id;
-          setActiveWorkspaceIdState(chosen);
+        if (!activeWorkspaceIdRef.current) {
+          const chosen = chooseDefaultWorkspace(list)?.id;
+          if (chosen) {
+            activeWorkspaceIdRef.current = chosen;
+            setActiveWorkspaceIdState(chosen);
+          }
         }
+      } else {
+        workspacesRef.current = [];
+        setWorkspaces([]);
       }
+      workspaceDataLoadedRef.current = true;
     } catch (err) {
       console.warn("[WorkspaceProvider] fetchWorkspaces error:", err);
+    } finally {
+      workspaceRefreshPromiseRef.current = null;
     }
-  }, [client, activeWorkspaceId]);
+    })();
+
+    workspaceRefreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, [client]);
 
   // Refresh agents for active workspace
   const refreshAgents = useCallback(async (preferredAgentId?: string) => {
@@ -1471,6 +1490,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [client, activeAgentId, refreshAgents, refreshWorkspaces]);
 
   const setActiveWorkspaceId = useCallback((id: string | null) => {
+    activeWorkspaceIdRef.current = id;
     setActiveWorkspaceIdState(id);
     if (id) {
       setAgents(allAgents.filter((a) => a.workspaceId === id));
@@ -1873,7 +1893,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const createSession = async (
+  const createSession = useCallback(async (
     initialPrompt?: string,
     targetWorkspaceId?: string,
     images?: ImageAttachment[],
@@ -1888,30 +1908,30 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      let resolvedWorkspaceId = targetWorkspaceId || activeWorkspaceIdRef.current;
-      const targetWs = workspaces.find((w) => w.id === resolvedWorkspaceId);
-      const cwd = targetWs?.path || activeWorkspace?.path || "/home/matt.cowger/workspace/tmp";
+      if (!workspaceDataLoadedRef.current) {
+        await refreshWorkspaces();
+      }
 
-      if (
-        resolvedWorkspaceId &&
-        (resolvedWorkspaceId.startsWith("prj_") || resolvedWorkspaceId.startsWith("remote:"))
-      ) {
+      const requestedWorkspaceId = targetWorkspaceId || activeWorkspaceIdRef.current || undefined;
+      const target = resolveWorkspaceTarget({
+        requestedWorkspaceId,
+        activeWorkspaceId: activeWorkspaceIdRef.current,
+        workspaces: workspacesRef.current,
+        projects: projectsRef.current,
+      });
+      let resolvedWorkspaceId = target.workspaceId;
+      let cwd = target.cwd;
+
+      if (target.needsProjectOpen && cwd) {
         const opened = await client.openProject(cwd);
-        if (opened && opened.workspace) {
+        if (opened?.workspace) {
           resolvedWorkspaceId = opened.workspace.id;
+          cwd = opened.workspace.path || cwd;
           await refreshWorkspaces();
         }
       }
 
-      if (!resolvedWorkspaceId) {
-        const opened = await client.openProject(cwd);
-        if (opened && opened.workspace) {
-          resolvedWorkspaceId = opened.workspace.id;
-          await refreshWorkspaces();
-        }
-      }
-
-      if (!resolvedWorkspaceId) {
+      if (!resolvedWorkspaceId || !cwd) {
         throw new Error("Could not find or open workspace");
       }
 
@@ -1975,7 +1995,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       console.error("[WorkspaceProvider] createAgent error:", err);
       return null;
     }
-  };
+  }, [
+    client,
+    models,
+    refreshAgents,
+    refreshWorkspaces,
+    selectedModel,
+    selectedMode,
+    selectedModelDefinition,
+    thinkingEffort,
+    timeline,
+  ]);
 
   const createWorktree = useCallback(
     async (params: {
@@ -2041,7 +2071,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
       return agent;
     },
-    [setActiveTab, timeline],
+    [createSession, setActiveTab, timeline],
   );
 
   const cancelTurn = async () => {
