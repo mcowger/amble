@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/index.ts",
-    "start": "NODE_ENV=production bun src/index.ts",
+    "dev": "bun --preload ./src/lib/paseo/relay-export-preload.ts --hot src/index.ts",
+    "start": "NODE_ENV=production bun --preload ./src/lib/paseo/relay-export-preload.ts src/index.ts",
     "build": "bun run build.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@getpaseo/client": "file:/home/matt.cowger/workspace/paseo/packages/client",
-    "@getpaseo/protocol": "file:/home/matt.cowger/workspace/paseo/packages/protocol",
+    "@getpaseo/client": "0.7.2",
+    "@getpaseo/protocol": "0.7.2",
+    "@getpaseo/relay": "0.7.2",
     "@radix-ui/react-collapsible": "^1.1.20",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",

@@ -1,6 +1,7 @@
 import tailwind from "bun-plugin-tailwind";
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import { paseoRelayExportWorkaround } from "./src/lib/paseo/relay-export-workaround";
 
 const outdir = path.join(process.cwd(), "dist");
 await rm(outdir, { recursive: true, force: true });
@@ -10,7 +11,7 @@ const entrypoints = [...new Bun.Glob("src/**/*.html").scanSync()];
 const result = await Bun.build({
   entrypoints,
   outdir,
-  plugins: [tailwind],
+  plugins: [tailwind, paseoRelayExportWorkaround],
   minify: true,
   target: "browser",
   sourcemap: "linked",
