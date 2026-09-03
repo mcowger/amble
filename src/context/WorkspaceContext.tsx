@@ -1617,7 +1617,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const openChangesTab = useCallback(() => {
     setIsChangesTabOpen(true);
     setActiveTabTarget({ kind: "changes", targetId: "changes" });
-  }, []);
+    // Always fetch fresh status when the tab is opened — the polled state
+    // may be stale (e.g. external edits since last workspace switch).
+    void refreshGitStatus();
+  }, [refreshGitStatus]);
 
   const updateAgentTitle = useCallback(
     async (agentId: string, title: string): Promise<void> => {
@@ -2065,10 +2068,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const commitGitChanges = async (message: string) => {
-    if (!activeWorkspaceId) return;
+    const cwd = activeWorkspace?.path;
+    if (!activeWorkspaceId || !cwd) return;
     try {
       await client.commitGitChanges({
         workspaceId: activeWorkspaceId,
+        cwd,
         message,
       });
       await refreshGitStatus();

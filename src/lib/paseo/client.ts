@@ -17,6 +17,7 @@ import type {
   AgentSnapshot,
   TerminalSessionInfo,
   GitStatusSummary,
+  GitFileChange,
   AgentPermissionResponse,
   ImageAttachment,
   AgentSlashCommand,
@@ -671,42 +672,96 @@ export class PaseoClient {
     return { success: (res as any)?.success ?? true };
   }
 
+  private diffFileToGitChange(file: {
+    path: string;
+    oldPath?: string;
+    isNew: boolean;
+    isDeleted: boolean;
+    additions: number;
+    deletions: number;
+    hunks: Array<{
+      lines: Array<{ type: "context" | "add" | "remove" | "header"; content: string }>;
+    }>;
+  }): GitFileChange {
+    const status: GitFileChange["status"] = file.isNew
+      ? "added"
+      : file.isDeleted
+        ? "deleted"
+        : file.oldPath && file.oldPath !== file.path
+          ? "renamed"
+          : "modified";
+    // Reconstruct unified diff text for the existing DiffViewer.
+    const lines: string[] = [];
+    lines.push(`--- a/${file.oldPath || file.path}`);
+    lines.push(`+++ b/${file.path}`);
+    for (const hunk of file.hunks || []) {
+      for (const line of hunk.lines || []) {
+        if (line.type === "add") lines.push(`+${line.content}`);
+        else if (line.type === "remove") lines.push(`-${line.content}`);
+        else lines.push(line.type === "header" ? line.content : ` ${line.content}`);
+      }
+    }
+    return {
+      path: file.path,
+      status,
+      insertions: file.additions,
+      deletions: file.deletions,
+      diff: lines.join("\n"),
+    };
+  }
+
   public async getGitStatus(workspaceIdOrCwd: string): Promise<GitStatusSummary> {
+    const empty: GitStatusSummary = {
+      branch: "main",
+      ahead: 0,
+      behind: 0,
+      isClean: true,
+      stagedFiles: [],
+      unstagedFiles: [],
+      untrackedFiles: [],
+    };
     try {
       const res = await this.daemon.getCheckoutStatus(workspaceIdOrCwd);
-      const isDirty = (res as any).isDirty ?? false;
+      // checkout_status carries only branch/dirty metadata — the actual file
+      // list lives behind getCheckoutDiff({ mode: "uncommitted" }).
+      let files: GitFileChange[] = [];
+      try {
+        const cwd = (res as any).cwd || workspaceIdOrCwd;
+        const diff = await this.daemon.getCheckoutDiff(cwd, { mode: "uncommitted" });
+        files = ((diff as any)?.files || []).map((f: any) => this.diffFileToGitChange(f));
+      } catch (diffErr) {
+        console.warn("[PaseoClient] getCheckoutDiff error:", diffErr);
+      }
+      const isDirty = (res as any).isDirty ?? files.length > 0;
       const aheadBehind = (res as any).aheadBehind;
       return {
         branch: (res as any).currentBranch || "main",
         upstream: (res as any).upstreamRef || undefined,
         ahead: aheadBehind?.ahead ?? (res as any).aheadOfOrigin ?? 0,
         behind: aheadBehind?.behind ?? (res as any).behindOfOrigin ?? 0,
-        isClean: !isDirty,
-        stagedFiles: (res as any).stagedFiles || [],
-        unstagedFiles: (res as any).unstagedFiles || [],
-        untrackedFiles: (res as any).untrackedFiles || [],
+        isClean: !isDirty && files.length === 0,
+        stagedFiles: [],
+        unstagedFiles: files,
+        untrackedFiles: files.filter((f) => f.status === "added").map((f) => f.path),
       };
     } catch {
-      return {
-        branch: "main",
-        ahead: 0,
-        behind: 0,
-        isClean: true,
-        stagedFiles: [],
-        unstagedFiles: [],
-        untrackedFiles: [],
-      };
+      return empty;
     }
   }
 
   public async commitGitChanges(params: {
     workspaceId: string;
     message: string;
+    cwd?: string;
   }): Promise<{ commitSha: string }> {
-    const res = await this.daemon.checkoutCommit(params.workspaceId, {
+    const res = await this.daemon.checkoutCommit(params.cwd || params.workspaceId, {
       message: params.message,
       addAll: true,
     });
-    return res as any;
+    const payload = res as any;
+    if (payload && payload.success === false) {
+      throw new Error(payload.error?.message || "Commit failed");
+    }
+    return payload;
   }
 }
