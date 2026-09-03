@@ -563,6 +563,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           setActiveAgentIdState(preferredAgentId);
           activeAgentIdRef.current = preferredAgentId;
         }
+      } else {
+        setActiveAgentIdState(null);
+        activeAgentIdRef.current = null;
+        setTimeline([]);
+        setIsTimelineLoading(false);
       }
     } catch (err) {
       console.warn("[WorkspaceProvider] fetchAgents error:", err);
@@ -894,6 +899,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       client.setAgentTimelineSubscription([activeAgentId]).catch(console.warn);
       if (activeAgent) {
         setIsTurnRunning(activeAgent.status === "running");
+      }
+    } else if (!activeAgentId) {
+      setTimeline([]);
+      setIsTimelineLoading(false);
+      setIsTurnRunning(false);
+      setCommands([]);
+      if (connectionState === "connected") {
+        client.setAgentTimelineSubscription([]).catch(console.warn);
       }
     }
   }, [activeAgentId, connectionState, refreshTimeline, refreshCommands, client, activeAgent]);
@@ -1488,7 +1501,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setActiveAgentId = useCallback((id: string | null) => {
-    if (activeAgentIdRef.current && activeAgentIdRef.current !== id) {
+    if (id && activeAgentIdRef.current && activeAgentIdRef.current !== id) {
       timelineCacheRef.current.set(activeAgentIdRef.current, timeline);
     }
     activeAgentIdRef.current = id;
@@ -1504,7 +1517,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setIsTimelineLoading(true);
       }
     } else {
+      setActiveTabTarget(null);
       setTimeline([]);
+      setIsTimelineLoading(false);
+      setIsTurnRunning(false);
+      setCommands([]);
     }
   }, [timeline]);
 
@@ -1519,44 +1536,73 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               setActiveTab(remaining[0]!);
             } else {
               setActiveTabTarget(null);
+              setActiveAgentId(null);
             }
           }
           return;
         }
 
         if (tab.kind === "agent") {
-          await client.archiveAgent(tab.targetId);
-          await refreshAgents();
-          if (activeTab?.targetId === tab.targetId) {
-            const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
-            const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
+          timelineCacheRef.current.delete(tab.targetId);
+          setPendingPermissions((prev) => prev.filter((p) => p.agentId !== tab.targetId));
+          setAllAgents((prev) => prev.filter((a) => a.id !== tab.targetId));
+          setAgents((prev) => prev.filter((a) => a.id !== tab.targetId));
+
+          const wasActive =
+            activeTab?.targetId === tab.targetId ||
+            activeAgentIdRef.current === tab.targetId;
+          const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
+          const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
+
+          if (wasActive) {
             if (remaining.length > 0) {
-              const nextTab = remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
+              const nextTab =
+                remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
+              setActiveTab(nextTab);
+              if (nextTab.kind !== "agent") {
+                const remainingAgent = remaining.find((t) => t.kind === "agent");
+                if (remainingAgent) {
+                  setActiveAgentId(remainingAgent.targetId);
+                } else {
+                  setActiveAgentId(null);
+                }
+              }
+            } else {
+              setActiveTabTarget(null);
+              setActiveAgentId(null);
+            }
+          }
+
+          await client.archiveAgent(tab.targetId);
+          const remainingAgent = remaining.find((t) => t.kind === "agent");
+          const preferredAgent = wasActive
+            ? remainingAgent?.targetId
+            : activeAgentIdRef.current || undefined;
+          await refreshAgents(preferredAgent);
+        } else if (tab.kind === "terminal") {
+          const wasActive = activeTab?.targetId === tab.targetId;
+          const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
+          const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
+
+          if (wasActive) {
+            if (remaining.length > 0) {
+              const nextTab =
+                remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
               setActiveTab(nextTab);
             } else {
               setActiveTabTarget(null);
-              setActiveAgentIdState(null);
+              setActiveAgentId(null);
             }
           }
-        } else if (tab.kind === "terminal") {
+
           await client.killTerminal(tab.targetId);
           await refreshTerminals();
-          if (activeTab?.targetId === tab.targetId) {
-            const closedIdx = workspaceTabs.findIndex((t) => t.id === tab.id);
-            const remaining = workspaceTabs.filter((t) => t.targetId !== tab.targetId);
-            if (remaining.length > 0) {
-              const nextTab = remaining[closedIdx] || remaining[closedIdx - 1] || remaining[0]!;
-              setActiveTab(nextTab);
-            } else {
-              setActiveTabTarget(null);
-            }
-          }
         }
       } catch (err) {
         console.warn("[WorkspaceProvider] closeTab error:", err);
       }
     },
-    [client, refreshAgents, refreshTerminals, activeTab, workspaceTabs, setActiveTab],
+    [client, refreshAgents, refreshTerminals, activeTab, workspaceTabs, setActiveTab, setActiveAgentId],
   );
 
   const openChangesTab = useCallback(() => {
@@ -1629,10 +1675,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const archiveAgentSession = useCallback(
     async (agentId: string): Promise<void> => {
-      await client.archiveAgent(agentId);
-      await refreshAgents();
+      const tab = workspaceTabs.find((t) => t.kind === "agent" && t.targetId === agentId);
+      if (tab) {
+        await closeTab(tab);
+      } else {
+        timelineCacheRef.current.delete(agentId);
+        setPendingPermissions((prev) => prev.filter((p) => p.agentId !== agentId));
+        setAllAgents((prev) => prev.filter((a) => a.id !== agentId));
+        setAgents((prev) => prev.filter((a) => a.id !== agentId));
+        if (activeAgentIdRef.current === agentId) {
+          setActiveTabTarget(null);
+          setActiveAgentId(null);
+        }
+        await client.archiveAgent(agentId);
+        await refreshAgents();
+      }
     },
-    [client, refreshAgents],
+    [client, refreshAgents, workspaceTabs, closeTab, setActiveAgentId],
   );
 
   const killTerminalSession = useCallback(
