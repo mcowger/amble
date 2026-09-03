@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Brain, ChevronDown, ChevronRight, Sparkles, Loader2 } from "lucide-react";
-import { formatDuration } from "../../lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ThinkingTraceProps {
@@ -50,13 +49,7 @@ export function ThinkingTrace({
           ) : (
             <Sparkles className="w-3.5 h-3.5 text-blue-500" />
           )}
-          <span className="font-medium">
-            {isStreaming
-              ? "Thinking..."
-              : durationMs
-              ? `Thought for ${formatDuration(durationMs)}`
-              : "Thought Process"}
-          </span>
+          <span className="font-medium">Thought Process</span>
         </div>
 
         <div className="flex items-center gap-1.5">
