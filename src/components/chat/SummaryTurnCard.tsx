@@ -10,20 +10,25 @@ import {
   Code2,
   AlertCircle,
   Sparkles,
+  ListTodo,
 } from "lucide-react";
 import type {
   ToolCallTimelineItem,
   ReasoningTimelineItem,
   AssistantMessageTimelineItem,
+  TodoTimelineItem,
+  TodoItem,
 } from "../../lib/paseo/types";
 import { formatDuration, formatRelativePath } from "../../lib/utils";
 import { extractFilePathFromDiff, resolveDiffStats } from "./diff-utils";
 import { AssistantMessage } from "./AssistantMessage";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { TodoItemsList } from "./TodoBlock";
 
 interface SummaryTurnCardProps {
   toolCalls: ToolCallTimelineItem[];
   reasonings: ReasoningTimelineItem[];
+  todos?: TodoTimelineItem[];
   assistantMessage?: AssistantMessageTimelineItem;
   isCurrentRunningTurn?: boolean;
   activeAgentCwd?: string;
@@ -46,14 +51,33 @@ function getToolIcon(toolName: string) {
   return <Code2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
 }
 
+export function extractLatestTasks(todos?: TodoTimelineItem[]): TodoItem[] {
+  if (!todos || todos.length === 0) return [];
+  for (let i = todos.length - 1; i >= 0; i--) {
+    const item = todos[i];
+    if (item?.items && item.items.length > 0) {
+      return item.items;
+    }
+  }
+  return [];
+}
+
 export function SummaryTurnCard({
   toolCalls,
   reasonings,
+  todos = [],
   assistantMessage,
   isCurrentRunningTurn = false,
   activeAgentCwd,
 }: SummaryTurnCardProps) {
   const thoughtScrollRef = useRef<HTMLDivElement>(null);
+
+  // Extract latest tasks list from todos
+  const tasks = useMemo<TodoItem[]>(() => extractLatestTasks(todos), [todos]);
+
+  const completedTasksCount = useMemo(() => {
+    return tasks.filter((t) => t.completed || t.status === "completed").length;
+  }, [tasks]);
 
   // Aggregate tool call counts and statuses
   const { toolStats, modifiedFiles, totalToolsCount } = useMemo(() => {
@@ -168,6 +192,25 @@ export function SummaryTurnCard({
               {totalToolsCount} {totalToolsCount === 1 ? "call" : "calls"}
             </span>
           </div>
+
+          {/* Tasks & Plan (if present) */}
+          {tasks.length > 0 && (
+            <div className="py-2.5 border-b border-border/30 space-y-2">
+              <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-muted-foreground tracking-wider select-none">
+                <div className="flex items-center gap-1.5">
+                  <ListTodo className="w-3.5 h-3.5 text-primary" />
+                  <span>Tasks & Plan</span>
+                </div>
+                <span className="text-[10px] font-mono font-normal text-muted-foreground">
+                  {completedTasksCount}/{tasks.length}
+                </span>
+              </div>
+              <TodoItemsList
+                items={tasks}
+                className="space-y-1.5 max-h-48 overflow-y-auto pr-1"
+              />
+            </div>
+          )}
 
           {/* Tool counts */}
           <div className="py-2 space-y-1.5 flex-1">

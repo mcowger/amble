@@ -380,7 +380,10 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
           ) : summaryMode ? (
             /* Summary Mode: Grouped turns */
             turnGroups.map((group) => {
-              const hasActivity = group.toolCalls.length > 0 || group.reasonings.length > 0;
+              const hasActivity =
+                group.toolCalls.length > 0 ||
+                group.reasonings.length > 0 ||
+                group.todos.length > 0;
               return (
                 <div key={group.id} className="space-y-3">
                   {/* User Card */}
@@ -396,6 +399,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                     <SummaryTurnCard
                       toolCalls={group.toolCalls}
                       reasonings={group.reasonings}
+                      todos={group.todos}
                       assistantMessage={group.assistantMessages[0]}
                       isCurrentRunningTurn={group.isCurrentRunningTurn}
                       activeAgentCwd={activeAgent?.cwd}
@@ -421,11 +425,6 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                         <span>Agent is working...</span>
                       </div>
                     )}
-
-                  {/* Todos */}
-                  {group.todos.map((todo, tIdx) => (
-                    <TodoBlock key={`todo-${tIdx}`} item={todo} />
-                  ))}
 
                   {/* Errors */}
                   {group.errors.map((err, eIdx) => (
