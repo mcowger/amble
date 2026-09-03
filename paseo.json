@@ -1,6 +1,9 @@
 {
   "worktree": {
-    "setup": "bun install"
+    "setup": "bun install",
+    "servicePorts": {
+      "portScript": "./scripts/port-allocator.sh"
+    }
   },
   "scripts": {
     "dev": {

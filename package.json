@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --preload ./src/lib/paseo/relay-export-preload.ts --hot src/index.ts",
+    "dev": "PORT=\"${PORT:-$(./scripts/port-allocator.sh)}\" bun --preload ./src/lib/paseo/relay-export-preload.ts --hot src/index.ts",
     "start": "NODE_ENV=production bun --preload ./src/lib/paseo/relay-export-preload.ts src/index.ts",
     "build": "bun run build.ts",
     "check": "tsc --noEmit"
