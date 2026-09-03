@@ -117,22 +117,23 @@ export class PaseoClient {
       }
     });
 
-    this.unsubscribeDaemonEvents = daemon.on((event) => {
-      this.emit(event.type, event);
+    this.unsubscribeDaemonEvents = daemon.on((event: any) => {
+      const payload = event?.payload !== undefined ? event.payload : event;
+      this.emit(event.type, payload);
       if (event.type === "agent_stream") {
-        this.emit("agent_stream", event);
+        this.emit("agent_stream", payload);
       } else if (event.type === "agent_update") {
-        this.emit("agent_update", event.payload || event);
+        this.emit("agent_update", payload);
       } else if (event.type === "workspace_update") {
-        this.emit("workspace_update", event.payload || event);
+        this.emit("workspace_update", payload);
       } else if (event.type === "providers_snapshot_update") {
-        this.emit("providers_snapshot_update", event.payload || event);
+        this.emit("providers_snapshot_update", payload);
       } else if (event.type === "agent_permission_request") {
-        this.emit("agent_permission_request", event);
+        this.emit("agent_permission_request", payload);
       } else if (event.type === "agent_permission_resolved") {
-        this.emit("agent_permission_resolved", event);
-      } else if (event.type === "status" && (event.payload as any)?.status === "server_info") {
-        this.emit("server_info", event.payload);
+        this.emit("agent_permission_resolved", payload);
+      } else if (event.type === "status" && (payload as any)?.status === "server_info") {
+        this.emit("server_info", payload);
       }
     });
 
@@ -381,7 +382,10 @@ export class PaseoClient {
   ): Promise<any> {
     const opts = typeof options === "string" ? { workspaceId: options } : options;
     const scope = opts?.scope ?? "active";
-    const res = await this.daemon.fetchAgents(scope === "all" ? undefined : { scope: "active" });
+    const res = await this.daemon.fetchAgents({
+      scope: scope === "all" ? undefined : "active",
+      subscribe: { subscriptionId: "amble-agent-updates" },
+    });
     const workspaceId = opts?.workspaceId;
     if (workspaceId && res && Array.isArray(res.entries)) {
       const filtered = res.entries.filter((e) => {

@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { useTheme } from "../../context/ThemeContext";
 import { StatusBadge } from "./StatusBadge";
+import { ContextUsagePill } from "./ContextUsagePill";
+import { SessionTokenDetailPill } from "./SessionTokenDetailPill";
 import {
   Settings,
   Sun,
@@ -91,17 +93,17 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
             </button>
           </form>
         ) : (
-          <div className="group flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 truncate">
+          <div className="group flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
             <span
               onClick={handleStartRename}
-              className="truncate font-semibold text-foreground tracking-tight hover:underline cursor-pointer"
+              className="truncate font-semibold text-foreground tracking-tight hover:underline cursor-pointer min-w-0"
               title="Click to rename session"
             >
               {activeAgent?.title || activeAgent?.name || "Session"}
             </span>
             <button
               onClick={handleStartRename}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-opacity cursor-pointer shrink-0"
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-opacity cursor-pointer shrink-0 hidden sm:block"
               title="Rename session"
             >
               <Pencil className="w-3 h-3" />
@@ -111,9 +113,15 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
       </div>
 
       {/* Right: Controls & Badges */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
+        {/* Context Window Meter Pill */}
+        <ContextUsagePill />
+
+        {/* Session Token Detail Pill (Uploaded, Downloaded, Cache Hit Rate) */}
+        <SessionTokenDetailPill />
+
         {/* Model & Mode Indicators for Desktop */}
-        <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 border border-border/30 px-2.5 py-1 rounded-full">
+        <div className="hidden xl:flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/60 border border-border/30 px-2.5 py-1 rounded-full">
           <Sparkles className="w-3 h-3 text-amber-500" />
           <span className="font-medium text-foreground">
             {models.find((m) => m.id === selectedModel)?.displayName ||
@@ -140,29 +148,33 @@ export function TopRail({ onOpenSettings, onToggleSidebar }: TopRailProps) {
         <StatusBadge onClick={onOpenSettings} />
 
         {/* Action icons */}
-        <div className="flex items-center gap-0.5 border-l border-border/60 pl-1.5 sm:pl-2">
+        <div className="flex items-center gap-0.5 border-l border-border/60 pl-1 sm:pl-2">
           <button
             onClick={() => createAgentTab()}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
             title="Create New Session"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           <button
             onClick={() => setTheme(isDark ? "light" : "dark")}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
             title="Toggle Theme"
           >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {isDark ? (
+              <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            ) : (
+              <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            )}
           </button>
 
           <button
             onClick={onOpenSettings}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
+            className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
             title="Open Settings"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>

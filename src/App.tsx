@@ -9,6 +9,7 @@ import { TerminalView } from "./components/terminal/TerminalView";
 import { ChangesDrawer } from "./components/drawers/ChangesDrawer";
 import { PromptComposer } from "./components/composer/PromptComposer";
 import { BottomDrawer } from "./components/drawers/BottomDrawer";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
 
 function WorkspaceMain() {
@@ -55,7 +56,9 @@ export function App() {
     <ThemeProvider>
       <PaseoProvider>
         <WorkspaceProvider>
-          <WorkspaceMain />
+          <TooltipProvider delayDuration={150}>
+            <WorkspaceMain />
+          </TooltipProvider>
         </WorkspaceProvider>
       </PaseoProvider>
     </ThemeProvider>

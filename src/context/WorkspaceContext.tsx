@@ -184,12 +184,30 @@ function normalizeAgentSnapshot(entryOrAgent: any): AgentSnapshot {
     : agent.availableModes;
 
   const currentModeId = agent.currentModeId ?? agent.mode ?? null;
+  const lastUsage = agent.lastUsage || agent.tokenUsage;
+
+  const normalizedUsage = lastUsage
+    ? {
+        inputTokens: lastUsage.inputTokens ?? 0,
+        cachedInputTokens: lastUsage.cachedInputTokens ?? lastUsage.cachedTokens ?? 0,
+        cachedTokens: lastUsage.cachedInputTokens ?? lastUsage.cachedTokens ?? 0,
+        outputTokens: lastUsage.outputTokens ?? 0,
+        reasoningTokens: lastUsage.reasoningTokens ?? 0,
+        totalCost: lastUsage.totalCostUsd ?? lastUsage.totalCost ?? 0,
+        totalCostUsd: lastUsage.totalCostUsd ?? lastUsage.totalCost ?? 0,
+        contextWindow: lastUsage.contextWindowMaxTokens ?? lastUsage.contextWindow ?? 0,
+        contextWindowMaxTokens: lastUsage.contextWindowMaxTokens ?? lastUsage.contextWindow ?? 0,
+        contextWindowUsedTokens: lastUsage.contextWindowUsedTokens ?? lastUsage.contextWindowUsed ?? 0,
+      }
+    : agent.tokenUsage;
 
   return {
     ...agent,
     project,
     currentModeId,
     availableModes,
+    lastUsage: lastUsage ? { ...lastUsage, ...normalizedUsage } : undefined,
+    tokenUsage: normalizedUsage,
   };
 }
 
@@ -686,6 +704,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeAgentId, connectionState, refreshTimeline, client, activeAgent]);
 
+  // Poll agents while a turn is actively running to catch intermediate step token updates
+  useEffect(() => {
+    if (!isTurnRunning || connectionState !== "connected") return;
+
+    const interval = setInterval(() => {
+      refreshAgents();
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [isTurnRunning, connectionState, refreshAgents]);
+
   useEffect(() => {
     if (!activeAgent) return;
 
@@ -729,14 +758,49 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Listen to live agent stream and updates
   useEffect(() => {
-    const unsubStream = client.on("agent_stream", (payload: any) => {
-      if (!payload) return;
-      const streamAgentId = payload.agentId;
-      const event = payload.event || payload;
+    const unsubStream = client.on("agent_stream", (rawPayload: any) => {
+      if (!rawPayload) return;
+      const payload = rawPayload.payload || rawPayload;
+      const streamAgentId = payload.agentId || rawPayload.agentId;
+      const event = payload.event || rawPayload.event || payload;
+      const targetAgentId = streamAgentId || activeAgentId;
       
       // Only process events for current active session
       if (streamAgentId && activeAgentId && streamAgentId !== activeAgentId) {
         return;
+      }
+
+      if (event.type === "usage_updated" || ((event.type === "turn_completed" || event.type === "turn_failed") && event.usage)) {
+        const usage = event.usage;
+        if (targetAgentId && usage) {
+          const updateUsage = (list: AgentSnapshot[]) =>
+            list.map((a) => {
+              if (a.id !== targetAgentId) return a;
+              const mergedUsage = {
+                ...a.lastUsage,
+                ...usage,
+                inputTokens: usage.inputTokens ?? a.lastUsage?.inputTokens ?? 0,
+                cachedInputTokens: usage.cachedInputTokens ?? a.lastUsage?.cachedInputTokens ?? 0,
+                outputTokens: usage.outputTokens ?? a.lastUsage?.outputTokens ?? 0,
+                totalCostUsd: usage.totalCostUsd ?? a.lastUsage?.totalCostUsd ?? 0,
+                contextWindowMaxTokens: usage.contextWindowMaxTokens ?? a.lastUsage?.contextWindowMaxTokens,
+                contextWindowUsedTokens: usage.contextWindowUsedTokens ?? a.lastUsage?.contextWindowUsedTokens,
+              };
+              return {
+                ...a,
+                lastUsage: mergedUsage,
+                tokenUsage: {
+                  ...a.tokenUsage,
+                  ...mergedUsage,
+                  totalCost: mergedUsage.totalCostUsd,
+                  contextWindow: mergedUsage.contextWindowMaxTokens,
+                  cachedTokens: mergedUsage.cachedInputTokens,
+                },
+              };
+            });
+          setAgents(updateUsage);
+          setAllAgents(updateUsage);
+        }
       }
 
       if (event.type === "turn_started") {
@@ -803,6 +867,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         );
         // Refresh agent list and timeline state when turn completes
         refreshAgents();
+        if (targetAgentId) {
+          refreshTimeline(targetAgentId);
+        }
       } else if (event.type === "timeline" && event.item) {
         const item: TimelineItem = event.item;
 
@@ -969,7 +1036,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const unsubAgentUpdate = client.on("agent_update", (payload: any) => {
       const agent = normalizeAgentSnapshot(payload.agent || payload);
       if (agent && agent.id) {
-        setAgents((prev) => {
+        const updateList = (prev: AgentSnapshot[]) => {
           const idx = prev.findIndex((a) => a.id === agent.id);
           if (idx >= 0) {
             const next = [...prev];
@@ -977,7 +1044,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             return next;
           }
           return [agent, ...prev];
-        });
+        };
+        setAgents(updateList);
+        setAllAgents(updateList);
         if (agent.id === activeAgentId) {
           setIsTurnRunning(agent.status === "running");
         }

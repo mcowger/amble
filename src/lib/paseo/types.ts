@@ -186,12 +186,30 @@ export interface AgentSnapshot {
   };
   activeTurnId?: string;
   turnsCount?: number;
+  lastUsage?: {
+    inputTokens?: number;
+    cachedInputTokens?: number;
+    outputTokens?: number;
+    totalCostUsd?: number;
+    contextWindowMaxTokens?: number;
+    contextWindowUsedTokens?: number;
+    [key: string]: any;
+  };
   tokenUsage?: {
     inputTokens?: number;
     outputTokens?: number;
     reasoningTokens?: number;
     totalCost?: number;
     contextWindow?: number;
+    cachedTokens?: number;
+    cachedInputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    cacheHitRate?: number;
+    contextWindowUsedTokens?: number;
+    totalCostUsd?: number;
+    contextWindowMaxTokens?: number;
+    [key: string]: any;
   };
   labels?: Record<string, string>;
 }
