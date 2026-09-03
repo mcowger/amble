@@ -241,10 +241,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(null);
+  const activeWorkspaceIdRef = useRef<string | null>(null);
+  activeWorkspaceIdRef.current = activeWorkspaceId;
 
   const [allAgents, setAllAgents] = useState<AgentSnapshot[]>([]);
   const [agents, setAgents] = useState<AgentSnapshot[]>([]);
   const [activeAgentId, setActiveAgentIdState] = useState<string | null>(null);
+  const activeAgentIdRef = useRef<string | null>(null);
+  activeAgentIdRef.current = activeAgentId;
 
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [isTimelineLoading, setIsTimelineLoading] = useState<boolean>(false);
@@ -407,8 +411,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Sync current timeline into cache whenever it updates
   useEffect(() => {
-    if (activeAgentId && timeline.length > 0) {
-      timelineCacheRef.current.set(activeAgentId, timeline);
+    if (activeAgentId) {
+      activeAgentIdRef.current = activeAgentId;
+      if (timeline.length > 0) {
+        timelineCacheRef.current.set(activeAgentId, timeline);
+      }
     }
   }, [activeAgentId, timeline]);
 
@@ -505,7 +512,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, [client, activeWorkspaceId]);
 
   // Refresh agents for active workspace
-  const refreshAgents = useCallback(async () => {
+  const refreshAgents = useCallback(async (preferredAgentId?: string) => {
     if (client.getState() !== "connected") return;
     try {
       const res = await client.fetchAgents({ scope: "active" });
@@ -523,8 +530,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       setAllAgents(list);
 
-      const filtered = activeWorkspaceId
-        ? list.filter((a) => a.workspaceId === activeWorkspaceId)
+      const curWsId = activeWorkspaceIdRef.current;
+      const filtered = curWsId
+        ? list.filter((a) => a.workspaceId === curWsId)
         : list;
       setAgents(filtered);
 
@@ -544,19 +552,27 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
 
-      const activeCandidates = activeWorkspaceId ? filtered : list;
-      if (activeCandidates.length > 0 && (!activeAgentId || !activeCandidates.some((a) => a.id === activeAgentId))) {
-        setActiveAgentIdState(activeCandidates[0]!.id);
+      const currentActiveId = preferredAgentId || activeAgentIdRef.current;
+      const activeCandidates = curWsId ? filtered : list;
+      if (activeCandidates.length > 0) {
+        if (!currentActiveId || !list.some((a) => a.id === currentActiveId)) {
+          const fallbackId = activeCandidates[0]!.id;
+          setActiveAgentIdState(fallbackId);
+          activeAgentIdRef.current = fallbackId;
+        } else if (preferredAgentId) {
+          setActiveAgentIdState(preferredAgentId);
+          activeAgentIdRef.current = preferredAgentId;
+        }
       }
     } catch (err) {
       console.warn("[WorkspaceProvider] fetchAgents error:", err);
     }
-  }, [client, activeWorkspaceId, activeAgentId]);
+  }, [client]);
 
   // Refresh timeline for active agent
   const refreshTimeline = useCallback(
     async (targetAgentId?: string) => {
-      const id = targetAgentId || activeAgentId;
+      const id = targetAgentId || activeAgentIdRef.current;
       if (!id || client.getState() !== "connected") {
         setTimeline([]);
         return;
@@ -565,7 +581,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       // Show cached timeline immediately if available (0ms delay, zero flicker)
       const cached = timelineCacheRef.current.get(id);
-      if (cached && cached.length > 0) {
+      if (cached !== undefined) {
         setTimeline(cached);
         setIsTimelineLoading(false);
       } else {
@@ -728,13 +744,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [client, activeAgentId],
+    [client],
   );
 
   // Refresh slash commands for active agent
   const refreshCommands = useCallback(
     async (targetAgentId?: string) => {
-      const id = targetAgentId || activeAgentId;
+      const id = targetAgentId || activeAgentIdRef.current;
       if (!id || client.getState() !== "connected") {
         setCommands([]);
         return;
@@ -746,7 +762,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         console.warn("[WorkspaceProvider] listCommands error:", err);
       }
     },
-    [client, activeAgentId],
+    [client],
   );
 
   // Refresh providers & models
@@ -1445,7 +1461,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     (tab: WorkspaceTabItem | { kind: ActiveTabKind; targetId: string }) => {
       setActiveTabTarget({ kind: tab.kind, targetId: tab.targetId });
       if (tab.kind === "agent") {
+        if (activeAgentIdRef.current && activeAgentIdRef.current !== tab.targetId) {
+          timelineCacheRef.current.set(activeAgentIdRef.current, timeline);
+        }
+        activeAgentIdRef.current = tab.targetId;
         setActiveAgentIdState(tab.targetId);
+
+        const cached = timelineCacheRef.current.get(tab.targetId);
+        if (cached !== undefined) {
+          setTimeline(cached);
+          setIsTimelineLoading(false);
+        } else {
+          setTimeline([]);
+          setIsTimelineLoading(true);
+        }
       } else if (tab.kind === "terminal") {
         const term = terminals.find((t) => t.id === tab.targetId);
         if (term) {
@@ -1455,15 +1484,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setIsChangesTabOpen(true);
       }
     },
-    [terminals],
+    [terminals, timeline],
   );
 
-  const setActiveAgentId = (id: string | null) => {
+  const setActiveAgentId = useCallback((id: string | null) => {
+    if (activeAgentIdRef.current && activeAgentIdRef.current !== id) {
+      timelineCacheRef.current.set(activeAgentIdRef.current, timeline);
+    }
+    activeAgentIdRef.current = id;
     setActiveAgentIdState(id);
     if (id) {
       setActiveTabTarget({ kind: "agent", targetId: id });
+      const cached = timelineCacheRef.current.get(id);
+      if (cached !== undefined) {
+        setTimeline(cached);
+        setIsTimelineLoading(false);
+      } else {
+        setTimeline([]);
+        setIsTimelineLoading(true);
+      }
+    } else {
+      setTimeline([]);
     }
-  };
+  }, [timeline]);
 
   const closeTab = useCallback(
     async (tab: WorkspaceTabItem): Promise<void> => {
@@ -1764,8 +1807,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     targetWorkspaceId?: string,
     images?: ImageAttachment[],
   ): Promise<AgentSnapshot | null> => {
+    // If this is a new blank session request, clear timeline immediately and cache previous session
+    if (!initialPrompt) {
+      if (activeAgentIdRef.current && timeline.length > 0) {
+        timelineCacheRef.current.set(activeAgentIdRef.current, timeline);
+      }
+      setTimeline([]);
+      setIsTimelineLoading(true);
+    }
+
     try {
-      let resolvedWorkspaceId = targetWorkspaceId || activeWorkspaceId;
+      let resolvedWorkspaceId = targetWorkspaceId || activeWorkspaceIdRef.current;
       const targetWs = workspaces.find((w) => w.id === resolvedWorkspaceId);
       const cwd = targetWs?.path || activeWorkspace?.path || "/home/matt.cowger/workspace/tmp";
 
@@ -1817,8 +1869,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           return next.sort(compareAgentSnapshotsByCreation);
         });
         setActiveAgentIdState(agent.id);
+        activeAgentIdRef.current = agent.id;
         setActiveTabTarget({ kind: "agent", targetId: agent.id });
-        setActiveWorkspaceIdState(resolvedWorkspaceId);
+        const finalWsId = agent.workspaceId || resolvedWorkspaceId;
+        setActiveWorkspaceIdState(finalWsId);
+        activeWorkspaceIdRef.current = finalWsId;
 
         if (images && images.length > 0) {
           saveUserMessageAttachments(agent.id, messageId, initialPrompt || "", images, messageId);
@@ -1833,13 +1888,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             clientMessageId: messageId,
             images,
           };
-          setTimeline([initialUserItem]);
           timelineCacheRef.current.set(agent.id, [initialUserItem]);
+          setTimeline([initialUserItem]);
           setIsTurnRunning(true);
         } else {
+          timelineCacheRef.current.set(agent.id, []);
           setTimeline([]);
+          setIsTimelineLoading(false);
         }
-        await refreshAgents();
+        await refreshAgents(agent.id);
         return agent;
       }
       return null;
@@ -1851,13 +1908,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const createAgentTab = useCallback(
     async (initialPrompt?: string): Promise<AgentSnapshot | null> => {
-      const agent = await createSession(initialPrompt, activeWorkspaceId || undefined);
+      // Clear timeline immediately so previous session contents disappear instantly
+      if (activeAgentIdRef.current && timeline.length > 0) {
+        timelineCacheRef.current.set(activeAgentIdRef.current, timeline);
+      }
+      setTimeline([]);
+      setIsTimelineLoading(true);
+
+      const agent = await createSession(initialPrompt, activeWorkspaceIdRef.current || undefined);
       if (agent) {
-        setActiveTabTarget({ kind: "agent", targetId: agent.id });
+        setActiveTab({ kind: "agent", targetId: agent.id });
       }
       return agent;
     },
-    [activeWorkspaceId],
+    [setActiveTab, timeline],
   );
 
   const cancelTurn = async () => {
