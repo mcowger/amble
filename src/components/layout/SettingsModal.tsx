@@ -30,7 +30,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     serverInfo,
     client,
   } = usePaseo();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, isDark } = useTheme();
 
   const [urlInput, setUrlInput] = useState(serverUrl);
   const [tokenInput, setTokenInput] = useState(authToken);
@@ -113,10 +113,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Server className="w-5 h-5 text-primary" />
-            <span>Settings & Connection</span>
-          </DialogTitle>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Server className="w-5 h-5 text-primary" />
+              <span>Settings & Connection</span>
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+              title={`Switch to ${isDark ? "light" : "dark"} theme`}
+              aria-label="Toggle Theme"
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+          </div>
           <DialogDescription>
             Configure your Paseo daemon connection and client preferences.
           </DialogDescription>

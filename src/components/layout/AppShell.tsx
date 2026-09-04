@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { TopRail } from "./TopRail";
+import { BreadcrumbsBar } from "./BreadcrumbsBar";
 import { Sidebar } from "./Sidebar";
 import { SettingsModal } from "./SettingsModal";
 import { useWorkspace } from "../../context/WorkspaceContext";
@@ -36,6 +37,9 @@ export function AppShell({ children, drawer }: AppShellProps) {
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
+        {/* Breadcrumbs Row (above top rail) */}
+        <BreadcrumbsBar onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} />
+
         {/* Top Header Rail */}
         <TopRail
           onOpenSettings={() => setSettingsOpen(true)}

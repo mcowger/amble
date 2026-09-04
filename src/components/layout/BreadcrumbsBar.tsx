@@ -1,0 +1,182 @@
+import React, { useState, useMemo } from "react";
+import { useWorkspace } from "../../context/WorkspaceContext";
+import { usePaseo } from "../../context/PaseoContext";
+import { ProjectIcon } from "./ProjectIcon";
+import { resolveActiveProjectWorktree } from "./project-worktree-utils";
+import {
+  Menu,
+  Pencil,
+  Check,
+  GitFork,
+  ChevronRight,
+} from "lucide-react";
+
+interface BreadcrumbsBarProps {
+  onToggleSidebar?: () => void;
+}
+
+export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
+  const {
+    activeAgent,
+    activeWorkspace,
+    projects,
+    workspaces,
+    setActiveWorkspaceId,
+    updateAgentTitle,
+  } = useWorkspace();
+
+  const { client } = usePaseo();
+
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+
+  const {
+    project,
+    projectName,
+    isWorktree,
+    worktreeLabel,
+    worktreeTooltip,
+    directWorkspace,
+    worktreeWorkspace,
+  } = useMemo(
+    () =>
+      resolveActiveProjectWorktree({
+        activeAgent,
+        activeWorkspace,
+        projects,
+        workspaces,
+      }),
+    [activeAgent, activeWorkspace, projects, workspaces],
+  );
+
+  const handleSelectProject = () => {
+    if (directWorkspace) {
+      setActiveWorkspaceId(directWorkspace.id);
+    } else if (project?.id) {
+      setActiveWorkspaceId(project.id);
+    }
+  };
+
+  const handleSelectWorktree = () => {
+    if (worktreeWorkspace?.id) {
+      setActiveWorkspaceId(worktreeWorkspace.id);
+    }
+  };
+
+  const handleStartRename = () => {
+    if (!activeAgent) return;
+    setEditedTitle(activeAgent.title || activeAgent.name || "");
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveTitle = () => {
+    if (!activeAgent || !isEditingTitle) return;
+    const trimmed = editedTitle.trim();
+    if (trimmed && trimmed !== activeAgent.title) {
+      updateAgentTitle(activeAgent.id, trimmed);
+    }
+    setIsEditingTitle(false);
+  };
+
+  return (
+    <div className="h-8 border-b border-border/40 bg-sidebar/50 backdrop-blur-xs px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden text-xs">
+      {/* Breadcrumbs trail: Project > Worktree > Active Session Title */}
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-hidden pr-2">
+        {onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer md:hidden shrink-0"
+            title="Toggle Sessions Menu"
+            aria-label="Toggle Sessions Menu"
+          >
+            <Menu className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Head entry: Project */}
+        {project && (
+          <button
+            type="button"
+            onClick={handleSelectProject}
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer shrink-0 max-w-[140px] sm:max-w-[200px]"
+            title={`Project: ${projectName || project.name}`}
+          >
+            <ProjectIcon project={project} client={client} />
+            <span className="truncate">{projectName || project.name}</span>
+          </button>
+        )}
+
+        {/* Head entry: Worktree (if relevant) */}
+        {project && isWorktree && worktreeLabel && (
+          <>
+            <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 select-none" />
+            <button
+              type="button"
+              onClick={handleSelectWorktree}
+              className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer font-mono shrink-0 max-w-[180px] sm:max-w-[260px]"
+              title={worktreeTooltip || `Worktree: ${worktreeLabel}`}
+            >
+              <GitFork className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">{worktreeLabel}</span>
+            </button>
+          </>
+        )}
+
+        {/* Breadcrumb Separator before Session Title */}
+        {project && (
+          <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 select-none" />
+        )}
+
+        {/* Active Session Title (Editable) */}
+        {isEditingTitle ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveTitle();
+            }}
+            className="flex items-center gap-1.5 min-w-0 max-w-[320px] sm:max-w-[520px] w-full"
+          >
+            <input
+              type="text"
+              value={editedTitle}
+              onChange={(e) => setEditedTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setIsEditingTitle(false);
+              }}
+              onBlur={handleSaveTitle}
+              placeholder="Session title..."
+              className="h-6 text-xs font-semibold px-2 py-0.5 w-full rounded-md bg-background border border-primary focus:outline-none text-foreground"
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="p-1 rounded hover:bg-accent text-primary cursor-pointer shrink-0"
+              title="Save title"
+            >
+              <Check className="w-3 h-3" />
+            </button>
+          </form>
+        ) : (
+          <div className="group flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
+            <span
+              onClick={handleStartRename}
+              className="truncate font-semibold text-foreground tracking-tight hover:underline cursor-pointer min-w-0"
+              title="Click to rename session"
+            >
+              {activeAgent?.title || activeAgent?.name || "Session"}
+            </span>
+            <button
+              type="button"
+              onClick={handleStartRename}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-opacity cursor-pointer shrink-0 hidden sm:block"
+              title="Rename session"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
