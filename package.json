@@ -59,6 +59,9 @@
   "peerDependencies": {
     "typescript": "^7"
   },
+  "overrides": {
+    "bun": "npm:empty-npm-package@1.0.0"
+  },
   "trustedDependencies": [
     "agent-browser"
   ]
