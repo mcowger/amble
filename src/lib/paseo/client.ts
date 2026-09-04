@@ -213,7 +213,7 @@ export class PaseoClient {
     const trimmed = url.trim();
     if (typeof window !== "undefined" && trimmed.startsWith("/")) {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.host || "127.0.0.1:5173";
+      const host = window.location.host || "127.0.0.1:5555";
       return `${proto}//${host}${trimmed}`;
     }
     return trimmed;
@@ -222,10 +222,10 @@ export class PaseoClient {
   private getDefaultUrl(): string {
     if (typeof window !== "undefined") {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.host || "127.0.0.1:5173";
+      const host = window.location.host || "127.0.0.1:5555";
       return `${proto}//${host}/api/paseo/ws`;
     }
-    return "ws://127.0.0.1:5173/api/paseo/ws";
+    return "ws://127.0.0.1:5555/api/paseo/ws";
   }
 
   private getOrCreateClientId(): string {

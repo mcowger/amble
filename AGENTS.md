@@ -3,7 +3,7 @@
 ## Visual Verification Rule (Mandatory)
 Any UI change, feature implementation, styling adjustment, or component refactor **must be visually confirmed at the end of the work**.
 - Do not rely solely on unit tests, type checks, or console assertions for UI validation.
-- Use `agent-browser` (or headless browser capture) to open the application (`http://127.0.0.1:5173`), navigate to the modified screen/view, take a snapshot/screenshot, and visually verify that the rendered output, typography, colors, drawers, and layouts match the design expectations with zero console or runtime errors.
+- Use `agent-browser` (or headless browser capture) to open the application (`http://127.0.0.1:5555`), navigate to the modified screen/view, take a snapshot/screenshot, and visually verify that the rendered output, typography, colors, drawers, and layouts match the design expectations with zero console or runtime errors.
 
 ## Design System & Aesthetic Discipline
 All UI development must adhere to the design system codified in [`docs/DESIGN_SYSTEM.md`](./docs/DESIGN_SYSTEM.md):
@@ -27,4 +27,12 @@ All UI development must adhere to the design system codified in [`docs/DESIGN_SY
 - **WebSocket Protocol**: Connects to the local Paseo daemon at `ws://127.0.0.1:6767/ws`.
 - **Paseo Client**: This tool is strictly a client of the Paseo server. No code specific to any agent (opencode, pi, claude, etc.) should be written. Everything must interact solely with the Paseo API. Consequently, there is never a need to review or interact with opencode, pi, etc. source code, nor their configuration files or databases.
 - **Command Timeouts**: Always use short, explicit timeouts on terminal/bash tool commands (e.g. 5-10 seconds) to prevent command hanging.
+
+## Staging & Deployment
+When asked to **deploy to staging** (or simply deploy), execute `bun run deploy`.
+This automated script handles the exact required workflow:
+1. **Compile**: Compiles Amble into a single Linux x64 standalone executable (`compile.ts`).
+2. **Ensure systemd unit**: Verifies `~/.config/systemd/user/amble.service` exists (preserving any existing unit file).
+3. **Copy binary**: Atomically installs the compiled binary to `~/.local/bin/amble`.
+4. **Restart service**: Restarts the user daemon (`systemctl --user restart amble.service`) listening on `http://0.0.0.0:5555`.
 

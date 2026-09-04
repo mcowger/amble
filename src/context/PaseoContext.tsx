@@ -5,10 +5,10 @@ import type { ConnectionState, ServerInfoPayload } from "../lib/paseo/types";
 export function getDefaultPaseoUrl(): string {
   if (typeof window !== "undefined") {
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host || "127.0.0.1:5173";
+    const host = window.location.host || "127.0.0.1:5555";
     return `${proto}//${host}/api/paseo/ws`;
   }
-  return "ws://127.0.0.1:5173/api/paseo/ws";
+  return "ws://127.0.0.1:5555/api/paseo/ws";
 }
 
 const LEGACY_DEFAULT_PATTERNS = [

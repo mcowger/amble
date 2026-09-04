@@ -207,7 +207,7 @@ To ensure full themeability (System, Light Warm Paper, Dark, and future theme pa
 
 | Area | Reference Artifact | Automated Verification Method |
 |---|---|---|
-| **Home / Empty State** | `docs/screenshots/01-home-new-session.png` | `agent-browser open http://localhost:5173 && agent-browser screenshot` |
+| **Home / Empty State** | `docs/screenshots/01-home-new-session.png` | `agent-browser open http://localhost:5555 && agent-browser screenshot` |
 | **Session Transcript** | `docs/screenshots/02-session-transcript.png` | `agent-browser snapshot -c` & verify row classes / heights |
 | **Tool Row (Shell)** | `docs/screenshots/03-tool-expanded-git.png` | Click tool row via `agent-browser click` & verify ANSI styling |
 | **Diff Viewer (Edit)** | `docs/screenshots/04-edit-file-diff.png` | Expand edit tool & verify green/red line wash and line numbers |

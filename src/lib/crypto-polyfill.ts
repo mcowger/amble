@@ -1,4 +1,4 @@
-// Polyfill crypto.randomUUID for non-secure contexts (e.g. accessing via local network IP over HTTP like http://192.168.0.10:5173)
+// Polyfill crypto.randomUUID for non-secure contexts (e.g. accessing via local network IP over HTTP like http://192.168.0.10:5555)
 if (typeof globalThis !== "undefined") {
   const gCrypto = globalThis.crypto || ((globalThis as any).crypto = {});
   if (typeof gCrypto.randomUUID !== "function") {

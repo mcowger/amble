@@ -7,7 +7,7 @@ import {
   type ProxySocketData,
 } from "./lib/paseo/proxy-handler";
 
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PORT || 5555);
 const hostname = process.env.HOST || "0.0.0.0";
 
 // Disable Bun's internal dev server Host header / DNS-rebinding check so it

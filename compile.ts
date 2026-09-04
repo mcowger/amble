@@ -81,7 +81,7 @@ import {
 } from ${JSON.stringify(proxyHandlerPath)};
 
 const args = process.argv.slice(2);
-let port = Number(process.env.PORT || 5173);
+let port = Number(process.env.PORT || 5555);
 let hostname = process.env.HOST || "0.0.0.0";
 
 for (let i = 0; i < args.length; i++) {
@@ -104,7 +104,7 @@ for (let i = 0; i < args.length; i++) {
     console.log("Usage: amble [options]");
     console.log("");
     console.log("Options:");
-    console.log("  -p, --port <number>  Port to listen on (default: 5173, env: PORT)");
+    console.log("  -p, --port <number>  Port to listen on (default: 5555, env: PORT)");
     console.log("  -h, --host <string>  Host address to bind (default: 0.0.0.0, env: HOST)");
     console.log("      --help           Show this help message");
     process.exit(0);

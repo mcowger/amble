@@ -191,7 +191,7 @@ Start the hot-reloading development server:
 bun dev
 ```
 
-Open `http://localhost:5173` in your browser. Amble will automatically proxy WebSocket connections to your local Paseo daemon.
+Open `http://localhost:5555` in your browser. Amble will automatically proxy WebSocket connections to your local Paseo daemon.
 
 ### 3. Production Build
 To create an optimized production bundle:
