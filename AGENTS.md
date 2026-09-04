@@ -29,10 +29,29 @@ All UI development must adhere to the design system codified in [`docs/DESIGN_SY
 - **Command Timeouts**: Always use short, explicit timeouts on terminal/bash tool commands (e.g. 5-10 seconds) to prevent command hanging.
 
 ## Staging & Deployment
-When asked to **deploy to staging** (or simply deploy), execute `bun run deploy`.
+- **Do not deploy to staging without explicit permission**: Only execute `bun run deploy` when the user explicitly instructs to deploy to staging. All testing, validation, and debugging must be done on the dev server (`paseo script start dev` on its allocated port, e.g. 35071).
+- When asked to **deploy to staging** (or simply deploy), execute `bun run deploy`.
 This automated script handles the exact required workflow:
 1. **Compile**: Compiles Amble into a single Linux x64 standalone executable (`compile.ts`).
 2. **Ensure systemd unit**: Verifies `~/.config/systemd/user/amble.service` exists (preserving any existing unit file).
 3. **Copy binary**: Atomically installs the compiled binary to `~/.local/bin/amble`.
 4. **Restart service**: Restarts the user daemon (`systemctl --user restart amble.service`) listening on `http://0.0.0.0:5555`.
+
+## Mobile, iOS & Touch Event Discipline
+- **React Aria Press Primitives**:
+  - Always use `<PressButton onPress={...}>` or `<PressTarget onPress={...}>` (from `@/components/ui/button`) for Amble-owned buttons, action items, and clickable rows instead of raw `<button onClick={...}>` or `<div onClick={...}>`.
+  - React Aria's `useButton` and `usePress` normalize cross-platform touch, pointer, and keyboard activation, accurately discriminate scroll gestures vs taps, and prevent iOS WebKit swallowed-click issues.
+  - Leave text inputs and `<textarea>` native. Never wrap text inputs in `usePress` or `Pressable`, as iOS Safari requires unprevented native user gestures to invoke the virtual keyboard and position carets.
+  - Radix UI triggers (`PopoverTrigger`, `TooltipTrigger`) remain native controls composed via `asChild`.
+- **CSS Hover Rules & Media Queries**:
+  - Never write universal `:hover` rules (such as `*:hover`) or hover transition overrides that evaluate on touch devices. In WebKit, any element with a `:hover` rule causes the browser to interpret the first tap as a "mouse hover" to reveal styles, swallowing the click event until a second tap.
+  - All hover utility classes must be scoped inside `@media (hover: hover) and (pointer: fine)` (codified in `styles/globals.css`).
+- **DOM Stability During Touch Interaction**:
+  - WebKit drops trailing synthetic `click` events if the DOM mutates significantly between `touchstart` and `touchend`. Never mount on-screen HUDs, mutate element layouts, or update reactive state synchronously inside touch handlers.
+- **Terminal & Background Component Focus**:
+  - Never allow background or hidden terminal instances to auto-focus (`term.focus()`). Off-screen xterm helper textareas steal focus, trigger rapid `focusin` / `blur` cascades, and drop mobile taps.
+  - Only mount active terminal tabs in the DOM; unmounted terminal sessions remain buffered in `PaseoClient` for replay upon activation.
+- **Viewport & Icon Hit Testing**:
+  - Maintain `touch-action: manipulation` across the page to disable the legacy double-tap zoom delay.
+  - Ensure SVG icons inside buttons have `pointer-events: none` so touch hit-testing directly resolves to the parent interactive element.
 
