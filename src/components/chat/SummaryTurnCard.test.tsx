@@ -102,7 +102,9 @@ describe("SummaryTurnCard with tasks", () => {
     // Verify Tasks & Plan appears
     expect(html).toContain("Tasks &amp; Plan");
     expect(html).toContain("1/3");
-    expect(html).toContain("Inspect codebase architecture");
+    // Crossed-off task is collapsed into expando by default
+    expect(html).toContain("1 completed task");
+    // Active and upcoming tasks are shown directly
     expect(html).toContain("Implement new task summary layout");
     expect(html).toContain("Verify with visual inspection");
 
@@ -111,12 +113,17 @@ describe("SummaryTurnCard with tasks", () => {
     expect(html).toContain("bash:");
     expect(html).toContain("2 calls");
 
-    // Verify task appears before the tool calls in the DOM markup
-    const tasksIndex = html.indexOf("Inspect codebase architecture");
+    // Verify tasks section appears before the tool calls in the DOM markup
+    const tasksIndex = html.indexOf("Implement new task summary layout");
     const readToolIndex = html.indexOf("read:");
     expect(tasksIndex).toBeGreaterThan(-1);
     expect(readToolIndex).toBeGreaterThan(-1);
     expect(tasksIndex).toBeLessThan(readToolIndex);
+
+    // Verify layout classes for matching height
+    expect(html).toContain("items-stretch");
+    expect(html).toContain("md:h-0 md:min-h-full");
+    expect(html).toContain("min-h-0");
   });
 
   test("does not render tasks section when no tasks are provided", () => {
