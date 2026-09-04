@@ -180,10 +180,10 @@ export function SummaryTurnCard({
   return (
     <div className="my-3 space-y-3">
       {/* 2-Column Summary Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
         {/* Left Column: Tools Summary */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0">
-          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none">
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0 min-h-[160px]">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
             <div className="flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
               <span>Tools</span>
@@ -195,7 +195,7 @@ export function SummaryTurnCard({
 
           {/* Tasks & Plan (if present) */}
           {tasks.length > 0 && (
-            <div className="py-2.5 border-b border-border/30 space-y-2">
+            <div className="py-2.5 border-b border-border/30 space-y-2 shrink-0">
               <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-muted-foreground tracking-wider select-none">
                 <div className="flex items-center gap-1.5">
                   <ListTodo className="w-3.5 h-3.5 text-primary" />
@@ -207,7 +207,7 @@ export function SummaryTurnCard({
               </div>
               <TodoItemsList
                 items={tasks}
-                className="space-y-1.5 max-h-48 overflow-y-auto pr-1"
+                className="space-y-1.5 max-h-56 overflow-y-auto pr-1"
               />
             </div>
           )}
@@ -247,7 +247,7 @@ export function SummaryTurnCard({
 
           {/* Touched / Modified files */}
           {modifiedFiles.length > 0 && (
-            <div className="pt-2 border-t border-border/30 mt-auto select-none">
+            <div className="pt-2 border-t border-border/30 mt-auto select-none shrink-0">
               <div className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">
                 Touched Files ({modifiedFiles.length})
               </div>
@@ -283,8 +283,8 @@ export function SummaryTurnCard({
         </div>
 
         {/* Right Column: Thought Log Mini Console */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0">
-          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none">
+        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0 md:h-0 md:min-h-full">
+          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
             <div className="flex items-center gap-1.5">
               <Brain className="w-3.5 h-3.5 text-blue-500" />
               <span>Thought Log</span>
@@ -304,7 +304,7 @@ export function SummaryTurnCard({
           {/* Monospace Scrolling Console */}
           <div
             ref={thoughtScrollRef}
-            className="mt-2 flex-1 max-h-52 overflow-y-auto overflow-x-hidden text-xs leading-relaxed bg-background/60 rounded-md p-2.5 border border-border/30 text-muted-foreground select-text"
+            className="mt-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden text-xs leading-relaxed bg-background/60 rounded-md p-2.5 border border-border/30 text-muted-foreground select-text"
           >
             {combinedThoughtText ? (
               <MarkdownRenderer content={combinedThoughtText} variant="thought" />
