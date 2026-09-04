@@ -114,6 +114,9 @@ for (let i = 0; i < args.length; i++) {
 const server = serve<ProxySocketData>({
   port,
   hostname,
+  // 255s (Bun maximum) prevents idle keep-alive connections from being
+  // closed prematurely when behind reverse proxies like Nginx.
+  idleTimeout: 255,
   routes: {
     "/*": {
       GET() {
@@ -121,6 +124,7 @@ const server = serve<ProxySocketData>({
           headers: {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-cache",
+            "x-accel-buffering": "no",
           },
         });
       },

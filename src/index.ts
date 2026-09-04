@@ -16,6 +16,9 @@ const hostname = process.env.HOST || "0.0.0.0";
 const server = serve<ProxySocketData>({
   port,
   hostname,
+  // 255s (Bun maximum) prevents idle HTTP keep-alive connections from being
+  // closed prematurely when behind reverse proxies like Nginx.
+  idleTimeout: 255,
   routes: {
     // Serve index.html for all unmatched routes.
     "/*": index,

@@ -115,6 +115,7 @@ export function handleWsUpgrade(
 }
 
 export const proxyWebSocketHandler = {
+  idleTimeout: 255,
   open(clientWs: ServerWebSocket<ProxySocketData>) {
     clientWs.binaryType = "arraybuffer";
     const { clientProtocol, targetUrl, queue } = clientWs.data;
