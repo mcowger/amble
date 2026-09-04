@@ -104,6 +104,7 @@ export interface WorkspaceItem {
   workspaceKind?: "local_checkout" | "worktree" | "directory";
   worktreeSlug?: string;
   branch?: string;
+  scripts?: WorkspaceScriptItem[];
 }
 
 export interface WorktreeItem {
@@ -485,4 +486,48 @@ export interface DirectorySuggestionsResult {
   entries?: DirectorySuggestionEntry[];
   error: string | null;
   requestId: string;
+}
+
+// Workspace Script & Service Types
+export type WorkspaceScriptLifecycle = "running" | "stopped";
+export type WorkspaceScriptHealth = "healthy" | "unhealthy" | null;
+
+export interface WorkspaceScriptItem {
+  scriptName: string;
+  type: "script" | "service";
+  hostname: string;
+  port: number | null;
+  localProxyUrl?: string | null;
+  publicProxyUrl?: string | null;
+  proxyUrl?: string | null;
+  lifecycle: WorkspaceScriptLifecycle;
+  health: WorkspaceScriptHealth;
+  exitCode?: number | null;
+  terminalId?: string | null;
+}
+
+export interface WorkspaceScriptOperationResult {
+  requestId: string;
+  workspaceId: string;
+  scriptName?: string;
+  script?: WorkspaceScriptItem | null;
+  scripts?: WorkspaceScriptItem[];
+  error: string | null;
+}
+
+export interface StartWorkspaceScriptResult {
+  requestId: string;
+  workspaceId: string;
+  scriptName: string;
+  terminalId: string | null;
+  error: string | null;
+}
+
+export type WorkspaceScriptRouteKind = "public" | "paseo" | "direct";
+
+export interface WorkspaceScriptRoute {
+  kind: WorkspaceScriptRouteKind;
+  name: string;
+  url: string;
+  displayUrl: string;
 }

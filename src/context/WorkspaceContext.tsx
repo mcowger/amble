@@ -27,6 +27,7 @@ import type {
   ProjectCreateDirectoryResult,
   GithubSearchRepositoriesResult,
   ProjectGithubCloneResult,
+  WorkspaceScriptItem,
 } from "../lib/paseo/types";
 import { isModelVisionCapable } from "../lib/vision";
 import { compareAgentSnapshotsByCreation } from "../lib/agent-order";
@@ -170,6 +171,20 @@ interface WorkspaceContextType {
   // Slash Commands
   commands: AgentSlashCommand[];
   refreshCommands: (agentId?: string) => Promise<void>;
+
+  // Workspace Scripts & Services
+  scripts: WorkspaceScriptItem[];
+  refreshScripts: (workspaceId?: string) => Promise<void>;
+  startWorkspaceScript: (
+    scriptName: string,
+    options?: { switchToTerminal?: boolean },
+  ) => Promise<{ terminalId?: string | null; error?: string | null }>;
+  stopWorkspaceScript: (scriptName: string) => Promise<void>;
+  restartWorkspaceScript: (
+    scriptName: string,
+    options?: { switchToTerminal?: boolean },
+  ) => Promise<{ terminalId?: string | null; error?: string | null }>;
+  switchToScriptTerminal: (terminalId: string) => Promise<void>;
 
   // Drawer
   drawerOpen: boolean;
@@ -349,6 +364,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [gitStatus, setGitStatus] = useState<GitStatusSummary | null>(null);
   const [terminals, setTerminals] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalSlot, setActiveTerminalSlot] = useState<number | null>(null);
+
+  // Workspace Scripts & Services
+  const [scripts, setScripts] = useState<WorkspaceScriptItem[]>([]);
 
   // Subagents
   const [providerSubagents, setProviderSubagents] = useState<Record<string, SubagentInfo>>({});
@@ -569,6 +587,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               entry.gitRuntime?.currentBranch ||
               entry.project?.checkout?.currentBranch ||
               entry.worktreeSlug,
+            scripts: entry.scripts || [],
           });
         }
       }
@@ -595,6 +614,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (list.length > 0) {
         workspacesRef.current = list;
         setWorkspaces(list);
+        const currentTargetId = activeWorkspaceIdRef.current || chooseDefaultWorkspace(list)?.id;
+        if (currentTargetId) {
+          const cur = list.find((w) => w.id === currentTargetId);
+          if (cur?.scripts) {
+            setScripts(cur.scripts);
+          }
+        }
         if (!activeWorkspaceIdRef.current) {
           const chosen = chooseDefaultWorkspace(list)?.id;
           if (chosen) {
@@ -989,14 +1015,39 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [client, resolvedWorkspaceId, activeTerminalSlot],
   );
 
+  // Refresh scripts & services
+  const refreshScripts = useCallback(
+    async (targetWorkspaceId?: string) => {
+      if (client.getState() !== "connected") return;
+      const wsId = targetWorkspaceId || resolvedWorkspaceId;
+      if (!wsId) {
+        setScripts([]);
+        return;
+      }
+      try {
+        const res = await client.listWorkspaceScripts(wsId);
+        if (res && Array.isArray(res.scripts)) {
+          setScripts(res.scripts);
+          setWorkspaces((prev) =>
+            prev.map((w) => (w.id === wsId ? { ...w, scripts: res.scripts } : w)),
+          );
+        }
+      } catch (err) {
+        console.warn("[WorkspaceProvider] listWorkspaceScripts error:", err);
+      }
+    },
+    [client, resolvedWorkspaceId],
+  );
+
   // On connection state change to connected
   useEffect(() => {
     if (connectionState === "connected") {
       refreshWorkspaces();
       refreshTerminals();
       refreshProviders();
+      refreshScripts();
     }
-  }, [connectionState, refreshWorkspaces, refreshTerminals, refreshProviders]);
+  }, [connectionState, refreshWorkspaces, refreshTerminals, refreshProviders, refreshScripts]);
 
   // When active workspace changes
   useEffect(() => {
@@ -1004,8 +1055,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       refreshAgents();
       refreshGitStatus();
       refreshTerminals(resolvedWorkspaceId);
+      refreshScripts(resolvedWorkspaceId);
     }
-  }, [resolvedWorkspaceId, connectionState, refreshAgents, refreshGitStatus, refreshTerminals]);
+  }, [resolvedWorkspaceId, connectionState, refreshAgents, refreshGitStatus, refreshTerminals, refreshScripts]);
 
   // When active agent changes
   useEffect(() => {
@@ -1556,6 +1608,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       refreshWorkspaces();
     });
 
+    const unsubScriptStatus = client.on("script_status_update", (payload: any) => {
+      if (!payload || !payload.workspaceId || !Array.isArray(payload.scripts)) return;
+      setWorkspaces((prev) =>
+        prev.map((w) => (w.id === payload.workspaceId ? { ...w, scripts: payload.scripts } : w)),
+      );
+      if (payload.workspaceId === (activeWorkspaceIdRef.current || resolvedWorkspaceId)) {
+        setScripts(payload.scripts);
+      }
+    });
+
     return () => {
       unsubStream();
       unsubPermissionRequest();
@@ -1563,8 +1625,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       unsubAgentUpdate();
       unsubSubagents();
       unsubWorkspaceUpdate();
+      unsubScriptStatus();
     };
-  }, [client, activeAgentId, refreshAgents, refreshWorkspaces]);
+  }, [client, activeAgentId, resolvedWorkspaceId, refreshAgents, refreshWorkspaces]);
 
   const setActiveWorkspaceId = useCallback((id: string | null) => {
     activeWorkspaceIdRef.current = id;
@@ -1802,6 +1865,86 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       console.warn("[WorkspaceProvider] createTerminalTab error:", err);
     }
   }, [client, activeWorkspace, activeWorkspaceId, refreshTerminals]);
+
+  const startWorkspaceScript = useCallback(
+    async (
+      scriptName: string,
+      options?: { switchToTerminal?: boolean },
+    ): Promise<{ terminalId?: string | null; error?: string | null }> => {
+      const wsId = resolvedWorkspaceId;
+      if (!wsId) {
+        return { terminalId: null, error: "No active workspace" };
+      }
+      try {
+        const res = await client.startWorkspaceScript(wsId, scriptName);
+        if (res.error) {
+          return { terminalId: null, error: res.error };
+        }
+        await refreshTerminals(wsId);
+        await refreshScripts(wsId);
+        if (res.terminalId && (options?.switchToTerminal ?? true)) {
+          setActiveTabTarget({ kind: "terminal", targetId: res.terminalId });
+        }
+        return { terminalId: res.terminalId, error: null };
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] startWorkspaceScript error:", err);
+        return { terminalId: null, error: err?.message || String(err) };
+      }
+    },
+    [client, resolvedWorkspaceId, refreshTerminals, refreshScripts],
+  );
+
+  const stopWorkspaceScript = useCallback(
+    async (scriptName: string): Promise<void> => {
+      const wsId = resolvedWorkspaceId;
+      if (!wsId) return;
+      try {
+        await client.stopWorkspaceScript(wsId, scriptName);
+        await refreshScripts(wsId);
+      } catch (err) {
+        console.error("[WorkspaceProvider] stopWorkspaceScript error:", err);
+      }
+    },
+    [client, resolvedWorkspaceId, refreshScripts],
+  );
+
+  const restartWorkspaceScript = useCallback(
+    async (
+      scriptName: string,
+      options?: { switchToTerminal?: boolean },
+    ): Promise<{ terminalId?: string | null; error?: string | null }> => {
+      const wsId = resolvedWorkspaceId;
+      if (!wsId) {
+        return { terminalId: null, error: "No active workspace" };
+      }
+      try {
+        await client.stopWorkspaceScript(wsId, scriptName).catch(() => {});
+        const res = await client.startWorkspaceScript(wsId, scriptName);
+        if (res.error) {
+          return { terminalId: null, error: res.error };
+        }
+        await refreshTerminals(wsId);
+        await refreshScripts(wsId);
+        if (res.terminalId && (options?.switchToTerminal ?? false)) {
+          setActiveTabTarget({ kind: "terminal", targetId: res.terminalId });
+        }
+        return { terminalId: res.terminalId, error: null };
+      } catch (err: any) {
+        console.error("[WorkspaceProvider] restartWorkspaceScript error:", err);
+        return { terminalId: null, error: err?.message || String(err) };
+      }
+    },
+    [client, resolvedWorkspaceId, refreshTerminals, refreshScripts],
+  );
+
+  const switchToScriptTerminal = useCallback(
+    async (terminalId: string): Promise<void> => {
+      if (!terminalId) return;
+      await refreshTerminals(resolvedWorkspaceId || undefined);
+      setActiveTabTarget({ kind: "terminal", targetId: terminalId });
+    },
+    [refreshTerminals, resolvedWorkspaceId],
+  );
 
   const archiveAgentSession = useCallback(
     async (agentId: string): Promise<void> => {
@@ -2600,6 +2743,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
         commands,
         refreshCommands,
+
+        scripts,
+        refreshScripts,
+        startWorkspaceScript,
+        stopWorkspaceScript,
+        restartWorkspaceScript,
+        switchToScriptTerminal,
 
         drawerOpen,
         activeDrawerTab,

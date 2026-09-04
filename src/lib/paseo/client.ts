@@ -29,6 +29,9 @@ import type {
   GithubSearchRepositoriesResult,
   ProjectGithubCloneResult,
   DirectorySuggestionsResult,
+  WorkspaceScriptItem,
+  WorkspaceScriptOperationResult,
+  StartWorkspaceScriptResult,
 } from "./types";
 
 export interface PaseoClientConfig {
@@ -595,6 +598,31 @@ export class PaseoClient {
 
   public async fetchWorkspaces(): Promise<any> {
     return this.daemon.fetchWorkspaces();
+  }
+
+  public async listWorkspaceScripts(workspaceId: string): Promise<WorkspaceScriptOperationResult> {
+    return this.daemon.listWorkspaceScripts(workspaceId) as any;
+  }
+
+  public async startWorkspaceScript(
+    workspaceId: string,
+    scriptName: string,
+  ): Promise<StartWorkspaceScriptResult> {
+    return this.daemon.startWorkspaceScript(workspaceId, scriptName) as any;
+  }
+
+  public async startWorkspaceScriptWithStatus(
+    workspaceId: string,
+    scriptName: string,
+  ): Promise<WorkspaceScriptOperationResult> {
+    return this.daemon.startWorkspaceScriptWithStatus(workspaceId, scriptName) as any;
+  }
+
+  public async stopWorkspaceScript(
+    workspaceId: string,
+    scriptName: string,
+  ): Promise<WorkspaceScriptOperationResult> {
+    return this.daemon.stopWorkspaceScript(workspaceId, scriptName) as any;
   }
 
   public async fetchAgents(

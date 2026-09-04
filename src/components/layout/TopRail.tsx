@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 import { StatusBadge } from "./StatusBadge";
 import { ContextUsagePill } from "./ContextUsagePill";
 import { SessionTokenDetailPill } from "./SessionTokenDetailPill";
+import { WorkspaceScriptsTopRail } from "./WorkspaceScriptsTopRail";
 import {
   Settings,
   LayoutList,
@@ -22,7 +23,12 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
   } = useWorkspace();
 
   return (
-    <header className="h-10 sm:h-11 border-b border-border bg-sidebar/70 backdrop-blur-md px-2.5 sm:px-3.5 flex items-center justify-end select-none z-20 shrink-0 overflow-hidden">
+    <header className="h-10 sm:h-11 border-b border-border bg-sidebar/70 backdrop-blur-md px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden">
+      {/* Left: Tasks & Services */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        <WorkspaceScriptsTopRail />
+      </div>
+
       {/* Right: Controls & Badges */}
       <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 shrink-0">
         {/* Context Window Meter Pill */}
