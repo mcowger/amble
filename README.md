@@ -198,7 +198,6 @@ To create an optimized production bundle:
 
 ```bash
 bun run build
-bun start
 ```
 
 ### 4. Code Quality & Typechecking

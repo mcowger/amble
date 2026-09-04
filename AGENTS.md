@@ -15,7 +15,15 @@ All UI development must adhere to the design system codified in [`docs/DESIGN_SY
 
 ## Runtime & Architecture
 - **Runtime**: Native Bun (`Bun.serve()` with HTML imports). Do not use Vite, Fastify, Hono, or Express.
-- **Dev Server**: The dev server must ALWAYS be started using `bun run dev` — no manual methods or port allocations are permitted.
+- **Dev Server & Workspace Scripts**: The dev server and workspace scripts must ALWAYS be managed through Paseo so both the agent and Paseo remain in sync about server status and port allocations.
+  - Start dev server: `paseo script start dev` (or `bun run dev`)
+  - Stop dev server: `paseo script stop dev` (or `bun run stop`)
+  - List workspace scripts & check status/ports: `paseo script ls`
+  - Do not start the dev server manually or allocate ports outside of Paseo.
+- **Dev Server Logs & Terminal Management**: Dev server output and terminals can be viewed and interacted with using Paseo terminal commands:
+  - List terminals: `paseo terminal ls`
+  - Capture logs/output: `paseo terminal capture <terminal-id | name>` (e.g. `paseo terminal capture dev`)
+  - Send keys / interact: `paseo terminal send-keys <terminal-id> <keys...>`
 - **WebSocket Protocol**: Connects to the local Paseo daemon at `ws://127.0.0.1:6767/ws`.
 - **Paseo Client**: This tool is strictly a client of the Paseo server. No code specific to any agent (opencode, pi, claude, etc.) should be written. Everything must interact solely with the Paseo API. Consequently, there is never a need to review or interact with opencode, pi, etc. source code, nor their configuration files or databases.
 - **Command Timeouts**: Always use short, explicit timeouts on terminal/bash tool commands (e.g. 5-10 seconds) to prevent command hanging.

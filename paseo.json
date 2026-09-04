@@ -8,7 +8,7 @@
   "scripts": {
     "dev": {
       "type": "service",
-      "command": "PORT=\"$PASEO_PORT\" HOST=\"$HOST\" bun run dev"
+      "command": "PORT=\"$PASEO_PORT\" HOST=\"$HOST\" bun run dev:server"
     }
   }
 }
