@@ -8,6 +8,7 @@
     "dev:server": "PORT=\"${PORT:-$(./scripts/port-allocator.sh)}\" bun --preload ./src/lib/paseo/relay-export-preload.ts --hot src/index.ts",
     "dev:stop": "paseo script stop dev",
     "stop": "paseo script stop dev",
+    "init-worktree": "bun run scripts/init_worktree.ts",
     "build": "bun run build.ts",
     "compile": "bun run compile.ts",
     "deploy": "bun run deploy.ts",
