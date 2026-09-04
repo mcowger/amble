@@ -9,6 +9,7 @@ import {
   Check,
   GitFork,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { PressButton } from "../ui/button";
 
@@ -24,6 +25,7 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
     workspaces,
     setActiveWorkspaceId,
     updateAgentTitle,
+    createSession,
   } = useWorkspace();
 
   const { client } = usePaseo();
@@ -106,7 +108,7 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
           <PressButton
             type="button"
             onPress={handleSelectProject}
-            className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer shrink-0 max-w-[140px] sm:max-w-[200px]"
+            className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer shrink-0 max-w-[80px] sm:max-w-[180px]"
             title={`Project: ${projectName || project.name}`}
           >
             <ProjectIcon project={project} client={client} />
@@ -121,7 +123,7 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
             <PressButton
               type="button"
               onPress={handleSelectWorktree}
-              className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer font-mono shrink-0 max-w-[180px] sm:max-w-[260px]"
+              className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer font-mono shrink-0 max-w-[110px] sm:max-w-[240px]"
               title={worktreeTooltip || `Worktree: ${worktreeLabel}`}
             >
               <GitFork className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
@@ -183,6 +185,24 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
             </PressButton>
           </div>
         )}
+      </div>
+
+      {/* Right action: New Session button */}
+      <div className="flex items-center gap-1 shrink-0">
+        <PressButton
+          type="button"
+          onPress={async () => {
+            const targetWsId =
+              worktreeWorkspace?.id || directWorkspace?.id || project?.id || activeWorkspace?.id;
+            await createSession(undefined, targetWsId);
+          }}
+          className="h-7 w-7 sm:w-auto sm:px-2 flex items-center justify-center gap-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer transition-colors touch-manipulation text-xs shrink-0"
+          title={`New session in ${worktreeLabel || projectName || "workspace"}`}
+          aria-label={`New session in ${worktreeLabel || projectName || "workspace"}`}
+        >
+          <Plus className="w-3.5 h-3.5 pointer-events-none" />
+          <span className="hidden sm:inline">New Session</span>
+        </PressButton>
       </div>
     </div>
   );

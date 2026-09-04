@@ -753,7 +753,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
     );
     setActiveAgentId(firstAgent ? firstAgent.id : null);
 
-    if (onCloseMobile) {
+    if (firstAgent && onCloseMobile) {
       onCloseMobile();
     }
   };
@@ -766,7 +766,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
   };
 
   return (
-    <aside className="w-64 border-r border-border bg-sidebar flex flex-col h-full shrink-0 select-none">
+    <aside className="w-full md:w-64 border-r border-border bg-sidebar flex flex-col h-full shrink-0 select-none">
       {/* Fixed top header with '+' button and hairline separator */}
       <div className="h-10 px-3 flex items-center justify-between border-b border-border/40 shrink-0">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -812,56 +812,67 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
             return (
               <div key={project.id || project.name} className="space-y-0.5">
                 {/* Project Header */}
-                <PressTarget
-                  onPress={() => {
-                    toggleProjectCollapse(project.id, isProjectCollapsed);
-                    handleSelectProject(project, directWorkspace);
-                  }}
-                  className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
+                <div className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground transition-colors">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <PressButton
                       type="button"
                       onPress={() => {
                         toggleProjectCollapse(project.id, isProjectCollapsed);
                       }}
-                      className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
+                      className="p-1 sm:p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0 touch-manipulation"
                       title={isProjectCollapsed ? "Expand project" : "Collapse project"}
+                      aria-label={isProjectCollapsed ? "Expand project" : "Collapse project"}
                     >
                       <ChevronRight
-                        className={`w-3 h-3 transition-transform duration-150 ${
+                        className={`w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none transition-transform duration-150 ${
                           !isProjectCollapsed ? "rotate-90" : ""
                         }`}
                       />
                     </PressButton>
 
-                    <ProjectIcon project={project} client={client} />
-                    <span className="font-semibold text-xs tracking-tight lowercase truncate">
-                      {project.name}
-                    </span>
+                    <PressTarget
+                      onPress={() => {
+                        toggleProjectCollapse(project.id, isProjectCollapsed);
+                        handleSelectProject(project, directWorkspace);
+                      }}
+                      className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer truncate touch-manipulation"
+                    >
+                      <ProjectIcon project={project} client={client} />
+                      <span className="font-semibold text-xs tracking-tight lowercase truncate">
+                        {project.name}
+                      </span>
+                    </PressTarget>
                   </div>
 
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div
+                    className={`flex items-center gap-0.5 shrink-0 ${
+                      isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    } transition-opacity`}
+                  >
                     <PressButton
+                      type="button"
                       onPress={() => {
                         setTargetWorktreeProject(project);
                       }}
-                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
+                      className="p-1 sm:p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer touch-manipulation"
                       title={`New worktree in ${project.name}`}
+                      aria-label={`New worktree in ${project.name}`}
                     >
-                      <GitFork className="w-3 h-3" />
+                      <GitFork className="w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none" />
                     </PressButton>
                     <PressButton
+                      type="button"
                       onPress={() => {
                         handleNewSession(directWorkspace?.id || project.id);
                       }}
-                      className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
+                      className="p-1 sm:p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer touch-manipulation"
                       title={`New session in ${project.name}`}
+                      aria-label={`New session in ${project.name}`}
                     >
-                      <Plus className="w-3 h-3" />
+                      <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none" />
                     </PressButton>
                   </div>
-                </PressTarget>
+                </div>
 
                 {/* Project Body (Direct Sessions + Worktrees + Empty state) */}
                 {!isProjectCollapsed && (
@@ -973,16 +984,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                               </PressButton>
                             </div>
                           ) : (
-                            <PressTarget
-                              onPress={() => {
-                                if (hasWorktreeChildren) {
-                                  toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
-                                }
-                              }}
-                              className={`group pl-5 pr-1 py-1 flex items-center justify-between text-muted-foreground hover:text-foreground rounded hover:bg-accent/30 transition-colors ${
-                                hasWorktreeChildren ? "cursor-pointer" : "cursor-default"
-                              }`}
-                            >
+                            <div className="group pl-5 pr-1 py-1 flex items-center justify-between text-muted-foreground hover:text-foreground rounded hover:bg-accent/30 transition-colors">
                               <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
                                 {hasWorktreeChildren ? (
                                   <PressButton
@@ -990,33 +992,52 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                     onPress={() => {
                                       toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
                                     }}
-                                    className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
+                                    className="p-1 sm:p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0 touch-manipulation"
                                     title={isWorktreeCollapsed ? "Expand worktree" : "Collapse worktree"}
+                                    aria-label={isWorktreeCollapsed ? "Expand worktree" : "Collapse worktree"}
                                   >
                                     <ChevronRight
-                                      className={`w-3 h-3 transition-transform duration-150 ${
+                                      className={`w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none transition-transform duration-150 ${
                                         !isWorktreeCollapsed ? "rotate-90" : ""
                                       }`}
                                     />
                                   </PressButton>
                                 ) : (
-                                  <span className="w-4 shrink-0" />
+                                  <span className="w-5 sm:w-4 shrink-0" />
                                 )}
-                                <GitFork className="w-3.5 h-3.5 shrink-0 opacity-70" />
-                                {hasDistinctTitle ? (
-                                  <div className="flex flex-col min-w-0 leading-tight">
-                                    <span className="text-xs font-medium truncate text-foreground">
-                                      {displayTitle}
-                                    </span>
-                                    <span className="text-[10px] font-mono text-muted-foreground/80 truncate">
-                                      {wt.branch}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-xs font-medium truncate">{wt.branch}</span>
-                                )}
+                                <PressTarget
+                                  onPress={() => {
+                                    if (wt.workspaceId) {
+                                      setActiveWorkspaceId(wt.workspaceId);
+                                    }
+                                    if (hasWorktreeChildren) {
+                                      toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
+                                    }
+                                  }}
+                                  className={`flex items-center gap-1.5 min-w-0 flex-1 touch-manipulation ${
+                                    hasWorktreeChildren || wt.workspaceId ? "cursor-pointer" : "cursor-default"
+                                  }`}
+                                >
+                                  <GitFork className="w-3.5 h-3.5 shrink-0 opacity-70 pointer-events-none" />
+                                  {hasDistinctTitle ? (
+                                    <div className="flex flex-col min-w-0 leading-tight">
+                                      <span className="text-xs font-medium truncate text-foreground">
+                                        {displayTitle}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-muted-foreground/80 truncate">
+                                        {wt.branch}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs font-medium truncate">{wt.branch}</span>
+                                  )}
+                                </PressTarget>
                               </div>
-                              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div
+                                className={`flex items-center gap-0.5 shrink-0 ${
+                                  isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                } transition-opacity`}
+                              >
                                 {wt.workspaceId && (
                                   <PressButton
                                     type="button"
@@ -1024,10 +1045,11 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                       setEditingWorkspaceId(wt.workspaceId);
                                       setEditingTitle(wt.title || wt.branch);
                                     }}
-                                    className="p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer"
+                                    className="p-1 sm:p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer touch-manipulation"
                                     title="Rename feature title"
+                                    aria-label="Rename feature title"
                                   >
-                                    <Pencil className="w-3 h-3" />
+                                    <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none" />
                                   </PressButton>
                                 )}
                                 <PressButton
@@ -1035,73 +1057,118 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                   onPress={() => {
                                     handleNewSession(wt.workspaceId || directWorkspace?.id || project.id);
                                   }}
-                                  className="p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer"
+                                  className="p-1 sm:p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer touch-manipulation"
                                   title={`New session in ${wt.branch}`}
+                                  aria-label={`New session in ${wt.branch}`}
                                 >
-                                  <Plus className="w-3 h-3" />
+                                  <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 pointer-events-none" />
                                 </PressButton>
                               </div>
-                            </PressTarget>
+                            </div>
                           )}
 
                           {/* Worktree Sessions */}
-                          {!isWorktreeCollapsed &&
-                            wt.sessions.map((session) => {
-                              const isActive = session.id === activeAgentId;
-                              const elapsed = formatElapsed(session.updatedAt || session.createdAt);
+                          {!isWorktreeCollapsed && (
+                            <div className="space-y-0.5">
+                              {wt.sessions.map((session) => {
+                                const isActive = session.id === activeAgentId;
+                                const elapsed = formatElapsed(session.updatedAt || session.createdAt);
 
-                              return (
-                                <div key={session.id} className="pl-9 pr-1">
-                                  <PressTarget
-                                    onPress={() =>
-                                      handleSelectSession(
-                                        session.id,
-                                        session.workspaceId || wt.workspaceId || project.id,
-                                      )
-                                    }
-                                    className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded-md text-xs cursor-pointer transition-all ${
-                                      isActive
-                                        ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-200 shadow-2xs font-medium"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-1.5 min-w-0 truncate">
-                                      <div
-                                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                          isActive ? "bg-amber-500" : "bg-blue-500"
-                                        }`}
-                                      />
-                                      <span className="truncate">
-                                        {session.title || "Untitled Session"}
-                                      </span>
-                                    </div>
-                                    {elapsed && (
-                                      <span
-                                        className={`text-[10px] font-mono shrink-0 ml-1 ${
-                                          isActive
-                                            ? "text-amber-600 dark:text-amber-400"
-                                            : "text-muted-foreground/70"
-                                        }`}
-                                      >
-                                        {elapsed}
-                                      </span>
-                                    )}
-                                  </PressTarget>
+                                return (
+                                  <div key={session.id} className="pl-9 pr-1">
+                                    <PressTarget
+                                      onPress={() =>
+                                        handleSelectSession(
+                                          session.id,
+                                          session.workspaceId || wt.workspaceId || project.id,
+                                        )
+                                      }
+                                      className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded-md text-xs cursor-pointer transition-all touch-manipulation ${
+                                        isActive
+                                          ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-200 shadow-2xs font-medium"
+                                          : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0 truncate">
+                                        <div
+                                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                            isActive ? "bg-amber-500" : "bg-blue-500"
+                                          }`}
+                                        />
+                                        <span className="truncate">
+                                          {session.title || "Untitled Session"}
+                                        </span>
+                                      </div>
+                                      {elapsed && (
+                                        <span
+                                          className={`text-[10px] font-mono shrink-0 ml-1 ${
+                                            isActive
+                                              ? "text-amber-600 dark:text-amber-400"
+                                              : "text-muted-foreground/70"
+                                          }`}
+                                        >
+                                          {elapsed}
+                                        </span>
+                                      )}
+                                    </PressTarget>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Empty Worktree State */}
+                              {wt.sessions.length === 0 && (
+                                <div className="pl-9 pr-2 py-0.5">
+                                  <span className="text-[11px] text-muted-foreground/60 select-none">
+                                    No sessions in this worktree yet.
+                                  </span>
                                 </div>
-                              );
-                            })}
+                              )}
+
+                              {/* New Session in Worktree Action Item */}
+                              <div className="pl-9 pr-1 pt-0.5">
+                                <PressButton
+                                  type="button"
+                                  onPress={() => {
+                                    handleNewSession(wt.workspaceId || directWorkspace?.id || project.id);
+                                  }}
+                                  className="flex items-center gap-1.5 px-2 py-1 sm:py-0.5 rounded text-xs sm:text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-accent/40 transition-colors cursor-pointer w-full text-left touch-manipulation"
+                                  title={`New session in ${wt.branch}`}
+                                  aria-label={`New session in ${wt.branch}`}
+                                >
+                                  <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 opacity-70 shrink-0 pointer-events-none" />
+                                  <span className="truncate">New session...</span>
+                                </PressButton>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
 
                     {/* Empty Project / No Sessions */}
                     {!hasChildren && (
-                      <div className="pl-7 pr-2 py-0.5">
+                      <div className="pl-6 pr-2 py-0.5">
                         <span className="text-[11px] text-muted-foreground/60 select-none">
-                          No sessions in this workspace yet.
+                          No sessions in this project yet.
                         </span>
                       </div>
                     )}
+
+                    {/* New Session Action Item */}
+                    <div className="pl-6 pr-1 pt-0.5">
+                      <PressButton
+                        type="button"
+                        onPress={() => {
+                          handleNewSession(directWorkspace?.id || project.id);
+                        }}
+                        className="flex items-center gap-1.5 px-2 py-1 sm:py-0.5 rounded text-xs sm:text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-accent/40 transition-colors cursor-pointer w-full text-left touch-manipulation"
+                        title={`New session in ${project.name}`}
+                        aria-label={`New session in ${project.name}`}
+                      >
+                        <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 opacity-70 shrink-0 pointer-events-none" />
+                        <span className="truncate">New session...</span>
+                      </PressButton>
+                    </div>
 
                     {/* New Worktree Action Item */}
                     <div className="pl-6 pr-1 pt-0.5">
@@ -1110,10 +1177,11 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                         onPress={() => {
                           setTargetWorktreeProject(project);
                         }}
-                        className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/30 transition-colors cursor-pointer w-full text-left"
+                        className="flex items-center gap-1.5 px-2 py-1 sm:py-0.5 rounded text-xs sm:text-[11px] text-muted-foreground/70 hover:text-foreground hover:bg-accent/40 transition-colors cursor-pointer w-full text-left touch-manipulation"
                         title={`New worktree in ${project.name}`}
+                        aria-label={`New worktree in ${project.name}`}
                       >
-                        <GitFork className="w-3 h-3 opacity-60 shrink-0" />
+                        <GitFork className="w-3.5 h-3.5 sm:w-3 sm:h-3 opacity-70 shrink-0 pointer-events-none" />
                         <span className="truncate">New worktree...</span>
                       </PressButton>
                     </div>

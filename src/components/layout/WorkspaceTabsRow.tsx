@@ -142,43 +142,46 @@ export function WorkspaceTabsRow() {
             </PressTarget>
           );
         })}
+      </div>
 
-        {/* 3 New Tab Action Buttons: Agent, Terminal, Changes */}
-        <div className="flex items-center gap-0.5 shrink-0 pl-1 border-l border-border/40 ml-1">
-          <PressButton
-            type="button"
-            onPress={() => createAgentTab()}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
-            title="New Agent Session"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          </PressButton>
+      {/* 3 New Tab Action Buttons: Agent, Terminal, Changes */}
+      <div className="flex items-center gap-0.5 shrink-0 pl-1 border-l border-border/40 ml-1">
+        <PressButton
+          type="button"
+          onPress={() => createAgentTab()}
+          className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
+          title="New Agent Session"
+          aria-label="New Agent Session"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 pointer-events-none" />
+        </PressButton>
 
-          <PressButton
-            type="button"
-            onPress={() => createTerminalTab()}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
-            title="New Terminal"
-          >
-            <Terminal className="w-3.5 h-3.5 text-amber-500" />
-          </PressButton>
+        <PressButton
+          type="button"
+          onPress={() => createTerminalTab()}
+          className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
+          title="New Terminal"
+          aria-label="New Terminal"
+        >
+          <Terminal className="w-3.5 h-3.5 text-amber-500 pointer-events-none" />
+        </PressButton>
 
-          <PressButton
-            type="button"
-            onPress={() => openChangesTab()}
-            className={`h-7 w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors relative touch-manipulation ${
-              activeTab?.kind === "changes"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-            }`}
-            title="Git Changes"
-          >
-            <GitCommit className="w-3.5 h-3.5 text-amber-500" />
-            {changedFilesCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
-            )}
-          </PressButton>
-        </div>
+        <PressButton
+          type="button"
+          onPress={() => openChangesTab()}
+          className={`h-7 w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors relative touch-manipulation ${
+            activeTab?.kind === "changes"
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+          }`}
+          title="Git Changes"
+          aria-label="Git Changes"
+        >
+          <GitCommit className="w-3.5 h-3.5 text-amber-500 pointer-events-none" />
+          {changedFilesCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
+          )}
+        </PressButton>
       </div>
     </div>
   );
