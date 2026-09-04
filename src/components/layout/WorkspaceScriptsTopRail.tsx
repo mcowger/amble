@@ -170,7 +170,7 @@ export function WorkspaceScriptsTopRail() {
               type="button"
               disabled={!isConnected}
               className={cn(
-                "h-7 sm:h-7.5 px-2 rounded-md flex items-center gap-1.5 text-xs font-medium cursor-pointer transition-all duration-150 border select-none outline-none",
+                "h-7 sm:h-7.5 px-1.5 sm:px-2 rounded-md flex items-center gap-1 sm:gap-1.5 text-xs font-medium cursor-pointer transition-all duration-150 border select-none outline-none",
                 hasRunning
                   ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/15 hover:border-primary/40 shadow-xs"
                   : "bg-muted/40 border-border/70 text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border",

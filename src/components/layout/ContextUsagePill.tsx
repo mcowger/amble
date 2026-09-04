@@ -40,16 +40,18 @@ export function ContextUsagePill() {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-medium bg-muted/60 hover:bg-muted border border-border/30 text-muted-foreground transition-colors cursor-pointer select-none shrink-0"
+          className="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-medium bg-muted/60 hover:bg-muted border border-border/30 text-muted-foreground transition-colors cursor-pointer select-none shrink-0"
           title={`Context Window: ${formatK(usedTokens)} / ${formatK(maxTokens)} (${percentage}%)`}
         >
-          <Meter
-            value={usedTokens}
-            max={maxTokens}
-            size="sm"
-            variant={variant}
-            className="w-7 sm:w-12 h-1.5"
-          />
+          <div className="hidden sm:block">
+            <Meter
+              value={usedTokens}
+              max={maxTokens}
+              size="sm"
+              variant={variant}
+              className="w-12 h-1.5"
+            />
+          </div>
           <span className="font-mono text-foreground font-semibold">
             {percentage}%
           </span>

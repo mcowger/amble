@@ -321,7 +321,7 @@ export function WorkspaceGitActionsTopRail() {
             type="button"
             disabled={!isConnected || Boolean(pendingAction)}
             className={cn(
-              "h-8 sm:h-7 px-2.5 flex items-center gap-1.5 rounded-md border border-border/80 bg-card text-xs font-medium text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none",
+              "h-7 sm:h-7 px-2 sm:px-2.5 flex items-center gap-1 sm:gap-1.5 rounded-md border border-border/80 bg-card text-xs font-medium text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none",
               menuOpen && "bg-accent",
             )}
             aria-label="Git actions"
