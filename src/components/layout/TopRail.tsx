@@ -5,6 +5,7 @@ import { StatusBadge } from "./StatusBadge";
 import { ContextUsagePill } from "./ContextUsagePill";
 import { SessionTokenDetailPill } from "./SessionTokenDetailPill";
 import { WorkspaceScriptsTopRail } from "./WorkspaceScriptsTopRail";
+import { WorkspaceGitActionsTopRail } from "./WorkspaceGitActionsTopRail";
 import {
   Settings,
   LayoutList,
@@ -28,6 +29,7 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
       {/* Left: Tasks & Services */}
       <div className="flex items-center gap-1.5 min-w-0">
         <WorkspaceScriptsTopRail />
+        <WorkspaceGitActionsTopRail />
       </div>
 
       {/* Right: Controls & Badges */}

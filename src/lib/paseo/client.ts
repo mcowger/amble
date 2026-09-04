@@ -1030,6 +1030,52 @@ export class PaseoClient {
     return payload;
   }
 
+  public checkoutPrStatus(cwd: string) {
+    return this.daemon.checkoutPrStatus(cwd);
+  }
+
+  public checkoutRefresh(cwd: string) {
+    return this.daemon.checkoutRefresh(cwd);
+  }
+
+  public checkoutPull(cwd: string) {
+    return this.daemon.checkoutPull(cwd);
+  }
+
+  public checkoutPush(cwd: string) {
+    return this.daemon.checkoutPush(cwd);
+  }
+
+  public checkoutMerge(cwd: string, input: Parameters<DaemonClient["checkoutMerge"]>[1]) {
+    return this.daemon.checkoutMerge(cwd, input);
+  }
+
+  public checkoutMergeFromBase(
+    cwd: string,
+    input: Parameters<DaemonClient["checkoutMergeFromBase"]>[1],
+  ) {
+    return this.daemon.checkoutMergeFromBase(cwd, input);
+  }
+
+  public checkoutPrCreate(cwd: string, input: Parameters<DaemonClient["checkoutPrCreate"]>[1]) {
+    return this.daemon.checkoutPrCreate(cwd, input);
+  }
+
+  public checkoutPrMerge(cwd: string, input: Parameters<DaemonClient["checkoutPrMerge"]>[1]) {
+    return this.daemon.checkoutPrMerge(cwd, input);
+  }
+
+  public checkoutForgeSetAutoMerge(
+    cwd: string,
+    input: Parameters<DaemonClient["checkoutForgeSetAutoMerge"]>[1],
+  ) {
+    return this.daemon.checkoutForgeSetAutoMerge(cwd, input);
+  }
+
+  public archiveWorkspace(workspaceId: string) {
+    return this.daemon.archiveWorkspace(workspaceId);
+  }
+
   public async setWorkspaceTitle(
     workspaceId: string,
     title: string | null,
