@@ -73,6 +73,8 @@ const proxyHandlerPath = path.resolve(process.cwd(), "src/lib/paseo/proxy-handle
 
 const serverCode = `import { serve } from "bun";
 import html from "./index.html" with { type: "text" };
+import manifest from "./manifest.json" with { type: "text" };
+import logo from "./logo.svg" with { type: "text" };
 import {
   handleWsUpgrade,
   proxyWebSocketHandler,
@@ -118,13 +120,23 @@ const server = serve<ProxySocketData>({
   // closed prematurely when behind reverse proxies like Nginx.
   idleTimeout: 255,
   routes: {
-    "/*": {
+    "/manifest.json": {
       GET() {
-        return new Response(html, {
+        return new Response(manifest, {
           headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-cache",
-            "x-accel-buffering": "no",
+            "content-type": "application/manifest+json; charset=utf-8",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      },
+    },
+
+    "/logo.svg": {
+      GET() {
+        return new Response(logo, {
+          headers: {
+            "content-type": "image/svg+xml; charset=utf-8",
+            "cache-control": "public, max-age=86400",
           },
         });
       },
@@ -145,6 +157,18 @@ const server = serve<ProxySocketData>({
     "/ws": {
       GET(req: Request, s: any) {
         return handleWsUpgrade(req, s);
+      },
+    },
+
+    "/*": {
+      GET() {
+        return new Response(html, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "x-accel-buffering": "no",
+          },
+        });
       },
     },
   },
@@ -169,6 +193,16 @@ process.on("SIGTERM", () => {
 
 try {
   await writeFile(path.join(tempDir, "index.html"), bundledHtml, "utf8");
+  await writeFile(
+    path.join(tempDir, "manifest.json"),
+    await Bun.file(path.resolve(process.cwd(), "src/manifest.json")).text(),
+    "utf8",
+  );
+  await writeFile(
+    path.join(tempDir, "logo.svg"),
+    await Bun.file(path.resolve(process.cwd(), "src/logo.svg")).text(),
+    "utf8",
+  );
   await writeFile(path.join(tempDir, "entry.ts"), serverCode, "utf8");
 
   // Step 3: Compile into standalone executable

@@ -46,7 +46,7 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
             type="button"
             onClick={() => setSummaryMode((prev) => !prev)}
             className={cn(
-              "p-1 sm:p-1.5 rounded-md cursor-pointer transition-colors",
+              "h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors touch-manipulation",
               summaryMode
                 ? "bg-primary/10 text-primary hover:bg-primary/15"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -64,7 +64,7 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
           <button
             type="button"
             onClick={onOpenSettings}
-            className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+            className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="Open Settings"
             aria-label="Open Settings"
           >

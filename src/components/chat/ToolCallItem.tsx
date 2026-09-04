@@ -597,8 +597,9 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
     <div className="my-2 rounded-lg border border-border bg-card/70 text-xs overflow-hidden">
       {/* Tool Header Row */}
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-accent/50 cursor-pointer select-none transition-colors"
+        className="w-full flex items-center justify-between px-3 sm:px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[38px] text-left hover:bg-accent/50 cursor-pointer select-none transition-colors touch-manipulation"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
           {getToolIcon()}

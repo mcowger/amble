@@ -58,11 +58,12 @@ export function ModelSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="h-7 inline-flex min-w-0 max-w-[260px] sm:max-w-[320px] shrink-0 items-center gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
+          className="h-8 sm:h-7 inline-flex shrink-0 items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors touch-manipulation sm:max-w-[320px]"
           title={`Select Model: ${current.displayName || current.name}`}
+          aria-label={`Model: ${current.displayName || current.name}`}
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          <span className="min-w-0 truncate text-left">{current.displayName || current.name}</span>
+          <span className="hidden sm:inline min-w-0 truncate text-left">{current.displayName || current.name}</span>
           <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>

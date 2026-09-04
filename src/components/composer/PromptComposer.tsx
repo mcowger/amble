@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { cn } from "../../lib/utils";
 import { ModelSelector } from "./ModelSelector";
 import { EffortSelector } from "./EffortSelector";
 import { SlashCommands, type SlashCommandItem } from "./SlashCommands";
@@ -234,6 +235,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   }, [handleAddFiles]);
 
   const hasContent = Boolean(prompt.trim() || pendingImages.length > 0);
+  const isSteeringActive = effectiveIsTurnRunning && hasContent;
 
   const handleSend = async (activeTurnBehavior?: ActiveTurnBehavior) => {
     const trimmed = prompt.trim();
@@ -496,7 +498,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   };
 
   return (
-    <div className="relative max-w-4xl w-full mx-auto p-2 sm:p-4 pt-0 min-w-0">
+    <div className="relative max-w-4xl w-full mx-auto p-2 sm:p-4 pt-0 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shrink-0 min-w-0">
       {/* Popups */}
       {slashFilter !== null && (
         <SlashCommands
@@ -536,11 +538,17 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
 
       {/* Main Composer Box */}
       <div
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (!target.closest("button, input, [role='button'], [data-radix-collection-item], a")) {
+            textareaRef.current?.focus();
+          }
+        }}
         className={`rounded-2xl border ${
           isDraggingOver
             ? "border-primary ring-2 ring-primary/20 bg-primary/5"
             : "border-border bg-card"
-        } shadow-lg p-3 space-y-2 text-card-foreground transition-colors`}
+        } shadow-lg p-3 space-y-2 text-card-foreground transition-colors cursor-text`}
       >
         {/* Error Notification */}
         {imageError && (
@@ -643,10 +651,10 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
         />
 
         {/* Controls Row */}
-        <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40 select-none">
-          {/* Left: Mode selector & Model / Effort & Image upload button */}
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            {/* Upload Button: Always available (matches Paseo composer behavior) */}
+        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-border/40 select-none">
+          {/* Left: Image upload button & Mode/Model/Effort selectors */}
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+            {/* Upload Button: Always available on mobile and desktop */}
             <input
               ref={fileInputRef}
               type="file"
@@ -658,7 +666,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="h-7 flex items-center justify-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs"
+              className="h-8 sm:h-7 flex items-center justify-center gap-1 px-2.5 sm:px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs touch-manipulation"
               title={
                 isVisionCapable
                   ? "Attach image (vision model active)"
@@ -670,108 +678,116 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
               <span className="hidden sm:inline text-[11px]">Image</span>
             </button>
 
-            {/* Mode Pills */}
-            {modes.length > 0 && (
-              <>
-                <div className="hidden md:flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30 shrink-0 h-7">
-                {modes.map((m) => {
-                  const isActive = m.id === selectedMode;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setSelectedMode(m.id)}
-                      disabled={!canChangeMode || isActive}
-                      className={`h-6 flex items-center gap-1 px-2 rounded-md text-[11px] font-medium transition-colors ${
-                        isActive
-                          ? "bg-background text-foreground shadow-2xs font-semibold"
-                          : "text-muted-foreground hover:text-foreground"
-                      } ${
-                        canChangeMode && !isActive
-                          ? "cursor-pointer"
-                          : "cursor-default opacity-85"
-                      }`}
-                      title={
-                        canChangeMode
-                          ? m.description || `Switch to ${m.name}`
-                          : modes.length <= 1
-                          ? `Mode: ${m.name}`
-                          : "This provider does not support changing modes"
-                      }
-                    >
-                      {getModeIcon(m.id)}
-                      <span>{m.name}</span>
-                    </button>
-                  );
-                })}
-                </div>
-
-                {currentMode && (
-                  <Popover open={isModeMenuOpen} onOpenChange={setIsModeMenuOpen}>
-                    <PopoverTrigger asChild>
+            {/* Mode, Model & Effort: hidden on mobile during active turn with text so steering controls fit */}
+            <div
+              className={cn(
+                "items-center gap-1 sm:gap-1.5 min-w-0",
+                isSteeringActive ? "hidden sm:flex" : "flex",
+              )}
+            >
+              {/* Mode Pills */}
+              {modes.length > 0 && (
+                <>
+                  <div className="hidden md:flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/30 shrink-0 h-7">
+                  {modes.map((m) => {
+                    const isActive = m.id === selectedMode;
+                    return (
                       <button
+                        key={m.id}
                         type="button"
-                        disabled={!canChangeMode}
-                        className="h-7 md:hidden flex min-w-0 max-w-[80px] shrink-0 items-center gap-1 px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85"
+                        onClick={() => setSelectedMode(m.id)}
+                        disabled={!canChangeMode || isActive}
+                        className={`h-6 flex items-center gap-1 px-2 rounded-md text-[11px] font-medium transition-colors ${
+                          isActive
+                            ? "bg-background text-foreground shadow-2xs font-semibold"
+                            : "text-muted-foreground hover:text-foreground"
+                        } ${
+                          canChangeMode && !isActive
+                            ? "cursor-pointer"
+                            : "cursor-default opacity-85"
+                        }`}
                         title={
                           canChangeMode
-                            ? "Select agent mode"
-                            : `Mode: ${currentMode.name}`
+                            ? m.description || `Switch to ${m.name}`
+                            : modes.length <= 1
+                            ? `Mode: ${m.name}`
+                            : "This provider does not support changing modes"
                         }
-                        aria-label="Select agent mode"
                       >
-                        {getModeIcon(currentMode.id)}
-                        <span className="min-w-0 truncate">{currentMode.name}</span>
-                        <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                        {getModeIcon(m.id)}
+                        <span>{m.name}</span>
                       </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      side="top"
-                      align="start"
-                      sideOffset={6}
-                      className="w-56 p-1.5"
-                    >
-                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Agent Mode
-                      </div>
-                      <div className="space-y-0.5">
-                        {modes.map((m) => {
-                          const isActive = m.id === selectedMode;
-                          return (
-                            <button
-                              key={m.id}
-                              type="button"
-                              disabled={!canChangeMode || isActive}
-                              onClick={() => {
-                                setSelectedMode(m.id);
-                                setIsModeMenuOpen(false);
-                              }}
-                              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors disabled:cursor-default ${
-                                isActive
-                                  ? "bg-primary/10 text-primary font-medium"
-                                  : "text-foreground hover:bg-accent cursor-pointer"
-                              }`}
-                            >
-                              {getModeIcon(m.id)}
-                              <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                              {isActive && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </>
-            )}
+                    );
+                  })}
+                  </div>
 
-            {/* Model & Effort */}
-            <ModelSelector />
-            <EffortSelector />
+                  {currentMode && (
+                    <Popover open={isModeMenuOpen} onOpenChange={setIsModeMenuOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!canChangeMode}
+                          className="h-8 sm:h-7 md:hidden flex shrink-0 items-center gap-1 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors disabled:cursor-default disabled:opacity-85 touch-manipulation"
+                          title={
+                            canChangeMode
+                              ? `Agent mode: ${currentMode.name} (tap to change)`
+                              : `Mode: ${currentMode.name}`
+                          }
+                          aria-label={`Agent mode: ${currentMode.name}`}
+                        >
+                          {getModeIcon(currentMode.id)}
+                          <span className="hidden sm:inline min-w-0 truncate">{currentMode.name}</span>
+                          <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="top"
+                        align="start"
+                        sideOffset={6}
+                        className="w-56 p-1.5"
+                      >
+                        <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                          Agent Mode
+                        </div>
+                        <div className="space-y-0.5">
+                          {modes.map((m) => {
+                            const isActive = m.id === selectedMode;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                disabled={!canChangeMode || isActive}
+                                onClick={() => {
+                                  setSelectedMode(m.id);
+                                  setIsModeMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-left transition-colors disabled:cursor-default ${
+                                  isActive
+                                    ? "bg-primary/10 text-primary font-medium"
+                                    : "text-foreground hover:bg-accent cursor-pointer"
+                                }`}
+                              >
+                                {getModeIcon(m.id)}
+                                <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                                {isActive && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </>
+              )}
+
+              {/* Model & Effort */}
+              <ModelSelector />
+              <EffortSelector />
+            </div>
           </div>
 
           {/* Right: Submit / Steer / Interrupt Action */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
             {effectiveIsTurnRunning ? (
               hasContent ? (
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -781,7 +797,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       size="sm"
                       variant="ghost"
                       onClick={() => handleSend("steer")}
-                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground cursor-pointer gap-1.5"
+                      className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground cursor-pointer gap-1.5 touch-manipulation"
                       title="Steer (Enter): inject message into active turn without stopping"
                       aria-label="Steer active turn"
                     >
@@ -794,7 +810,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       size="sm"
                       variant="ghost"
                       onClick={() => handleSend("interrupt")}
-                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer gap-1.5 transition-colors"
+                      className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer gap-1.5 transition-colors touch-manipulation"
                       title="Interrupt (⌘↵ / Ctrl+Enter): stop current turn and start new turn"
                       aria-label="Interrupt turn and start new turn"
                     >
@@ -807,7 +823,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       size="sm"
                       variant="ghost"
                       onClick={() => handleSend("followup")}
-                      className="h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-blue-500/15 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer gap-1.5 transition-colors"
+                      className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-blue-500/15 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer gap-1.5 transition-colors touch-manipulation"
                       title="Follow-up (⌥↵ / Alt+Enter): send message after agent finishes current turn"
                       aria-label="Follow-up after agent finishes"
                     >
@@ -819,7 +835,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                   <button
                     type="button"
                     onClick={cancelTurn}
-                    className="h-7 w-7 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
+                    className="h-8 w-8 sm:h-7 sm:w-7 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0 touch-manipulation"
                     title="Stop generation without sending"
                     aria-label="Stop generation"
                   >
@@ -830,7 +846,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 <button
                   type="button"
                   onClick={cancelTurn}
-                  className="group relative h-7 w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0"
+                  className="group relative h-8 w-8 sm:h-7 sm:w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0 touch-manipulation"
                   title="Stop generation"
                   aria-label="Stop generation"
                 >
@@ -882,7 +898,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 type="button"
                 onClick={() => handleSend()}
                 disabled={!hasContent}
-                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 ${
+                className={`h-8 w-8 sm:h-7 sm:w-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 touch-manipulation ${
                   hasContent
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 active:scale-95"
                     : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"

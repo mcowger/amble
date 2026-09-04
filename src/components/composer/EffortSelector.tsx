@@ -29,11 +29,12 @@ export function EffortSelector() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="h-7 flex min-w-0 shrink-0 items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors"
-          title="Reasoning Effort"
+          className="h-8 sm:h-7 flex shrink-0 items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors touch-manipulation"
+          title={`Reasoning Effort: ${currentOption.label}`}
+          aria-label={`Reasoning Effort: ${currentOption.label}`}
         >
           <Brain className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-          <span className="min-w-0 truncate capitalize">{currentOption.label}</span>
+          <span className="hidden sm:inline min-w-0 truncate capitalize">{currentOption.label}</span>
           <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
         </button>
       </PopoverTrigger>

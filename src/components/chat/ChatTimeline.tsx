@@ -189,8 +189,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     isPinnedToBottomRef.current = true;
   }, [activeAgentId]);
 
-  // Observe inner content container resizes to keep bottom pinned when code blocks,
-  // images, syntax highlighting, or new streaming tokens expand the timeline height
+  // Observe inner content container resizes to keep bottom pinned when new tokens/content stream in
   useEffect(() => {
     const el = contentRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -198,14 +197,16 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
     const observer = new ResizeObserver(() => {
       if (isSwitchingSessionRef.current) return;
 
-      if (isPinnedToBottomRef.current && scrollRef.current) {
+      // Only auto-scroll to bottom on resize if a turn is actively running,
+      // so user clicks (like expanding tool calls or thoughts) do not jump the scroll position
+      if (isPinnedToBottomRef.current && isTurnRunning && scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     });
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [isTurnRunning]);
 
   // Instant scroll to bottom on initial load / session switch (no animation)
   useLayoutEffect(() => {
@@ -326,13 +327,13 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
   ];
 
   return (
-    <div className="relative flex-1 h-full min-h-0 overflow-hidden flex flex-col">
+    <div className="relative flex-1 min-h-0 overflow-hidden flex flex-col">
       {/* Scrollable Container with Shadcn ScrollArea */}
       <ScrollArea
-        type="always"
+        type="auto"
         viewportRef={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 h-full min-h-0 w-full"
+        className="flex-1 min-h-0 w-full"
         viewportClassName="px-3 sm:px-4 md:px-8 py-4 sm:py-6"
       >
         <div ref={contentRef} className="space-y-4 max-w-4xl w-full mx-auto min-w-0">

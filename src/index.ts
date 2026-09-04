@@ -1,5 +1,7 @@
 import { serve } from "bun";
 import index from "./index.html";
+import manifest from "./manifest.json";
+import logo from "./logo.svg" with { type: "text" };
 import {
   handleWsUpgrade,
   proxyWebSocketHandler,
@@ -20,8 +22,27 @@ const server = serve<ProxySocketData>({
   // closed prematurely when behind reverse proxies like Nginx.
   idleTimeout: 255,
   routes: {
-    // Serve index.html for all unmatched routes.
-    "/*": index,
+    "/manifest.json": {
+      GET() {
+        return Response.json(manifest, {
+          headers: {
+            "content-type": "application/manifest+json; charset=utf-8",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      },
+    },
+
+    "/logo.svg": {
+      GET() {
+        return new Response(logo, {
+          headers: {
+            "content-type": "image/svg+xml; charset=utf-8",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      },
+    },
 
     "/api/health": {
       GET() {
@@ -40,6 +61,9 @@ const server = serve<ProxySocketData>({
         return handleWsUpgrade(req, s);
       },
     },
+
+    // Serve index.html for all unmatched routes.
+    "/*": index,
   },
 
   websocket: proxyWebSocketHandler,

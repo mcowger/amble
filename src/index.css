@@ -6,7 +6,7 @@
   }
 
   body {
-    @apply grid place-items-center min-w-[320px] min-h-screen relative m-0 bg-background text-foreground;
+    @apply w-full h-full min-w-[320px] relative m-0 bg-background text-foreground overflow-hidden;
   }
 }
 

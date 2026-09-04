@@ -79,18 +79,18 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
   };
 
   return (
-    <div className="h-8 border-b border-border/40 bg-sidebar/50 backdrop-blur-xs px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden text-xs">
+    <div className="min-h-8 h-[calc(2rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] border-b border-border/40 bg-sidebar/50 backdrop-blur-xs px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden text-xs">
       {/* Breadcrumbs trail: Project > Worktree > Active Session Title */}
       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-hidden pr-2">
         {onToggleSidebar && (
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer md:hidden shrink-0"
+            className="h-8 w-8 -ml-1 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer md:hidden shrink-0 touch-manipulation"
             title="Toggle Sessions Menu"
             aria-label="Toggle Sessions Menu"
           >
-            <Menu className="w-3.5 h-3.5" />
+            <Menu className="w-4 h-4" />
           </button>
         )}
 

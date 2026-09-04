@@ -40,8 +40,9 @@ export function ThinkingTrace({
     <div className="my-2.5 rounded-lg border border-border/60 bg-muted/20 overflow-hidden text-xs">
       {/* Header */}
       <button
+        type="button"
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer select-none transition-colors"
+        className="w-full flex items-center justify-between px-3 sm:px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[36px] text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer select-none transition-colors touch-manipulation"
       >
         <div className="flex items-center gap-2">
           {isStreaming ? (

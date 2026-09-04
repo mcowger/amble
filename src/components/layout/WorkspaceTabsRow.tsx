@@ -39,7 +39,7 @@ export function WorkspaceTabsRow() {
   return (
     <div className="h-9 bg-sidebar/50 border-b border-border flex items-center justify-between px-2 gap-1 select-none shrink-0 z-10 overflow-hidden">
       {/* Tabs list */}
-      <div className="flex items-center gap-1 min-w-0 flex-1 h-full pt-1 overflow-hidden">
+      <div className="flex items-center gap-1 min-w-0 flex-1 h-full pt-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {workspaceTabs.map((tab) => {
           const isActive =
             activeTab?.kind === tab.kind && activeTab?.targetId === tab.targetId;
@@ -53,7 +53,7 @@ export function WorkspaceTabsRow() {
                 e.stopPropagation();
                 startRename(tab);
               }}
-              className={`group flex items-center gap-1.5 px-2 sm:px-2.5 h-8 rounded-t-md text-xs cursor-pointer transition-all flex-1 min-w-[60px] max-w-[200px] border-t border-x ${
+              className={`group flex items-center gap-1.5 px-2.5 sm:px-2.5 h-8 rounded-t-md text-xs cursor-pointer transition-all shrink-0 min-w-[72px] sm:min-w-[60px] max-w-[200px] border-t border-x touch-manipulation ${
                 isActive
                   ? "bg-background text-foreground font-medium border-t-2 border-t-amber-500 border-x-border/50 shadow-2xs"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border-transparent"
@@ -149,7 +149,7 @@ export function WorkspaceTabsRow() {
           <button
             type="button"
             onClick={() => createAgentTab()}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="New Agent Session"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -158,7 +158,7 @@ export function WorkspaceTabsRow() {
           <button
             type="button"
             onClick={() => createTerminalTab()}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+            className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="New Terminal"
           >
             <Terminal className="w-3.5 h-3.5 text-amber-500" />
@@ -167,7 +167,7 @@ export function WorkspaceTabsRow() {
           <button
             type="button"
             onClick={() => openChangesTab()}
-            className={`p-1 rounded-md cursor-pointer transition-colors relative ${
+            className={`h-7 w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors relative touch-manipulation ${
               activeTab?.kind === "changes"
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent"

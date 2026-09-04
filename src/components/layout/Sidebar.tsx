@@ -46,6 +46,7 @@ import { RegisterProjectModal } from "./RegisterProjectModal";
 
 interface SidebarProps {
   onCloseMobile?: () => void;
+  isMobile?: boolean;
 }
 
 function formatElapsed(timestamp?: string | number): string {
@@ -560,7 +561,7 @@ export function CreateWorktreeModal({
   );
 }
 
-export function Sidebar({ onCloseMobile }: SidebarProps) {
+export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
   const { client } = usePaseo();
   const {
     projects,
@@ -775,17 +776,17 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
           <button
             type="button"
             onClick={() => setIsRegisterProjectOpen(true)}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer transition-colors"
+            className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer transition-colors touch-manipulation"
             title="Register new project"
             aria-label="Register new project"
           >
             <Plus className="w-4 h-4" />
           </button>
-          {onCloseMobile && (
+          {isMobile && onCloseMobile && (
             <button
               type="button"
               onClick={onCloseMobile}
-              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer md:hidden transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer md:hidden transition-colors touch-manipulation"
               title="Close sidebar"
               aria-label="Close sidebar"
             >
