@@ -5,6 +5,7 @@ import remarkBreaks from "remark-breaks";
 import Prism from "prismjs";
 import { Copy, Check } from "lucide-react";
 import { clsx } from "clsx";
+import { PressButton } from "../ui/button";
 
 // Prism language components
 import "prismjs/components/prism-bash";
@@ -63,8 +64,8 @@ export function CodeBlock({ code, language, compact }: CodeBlockProps) {
         <span className="font-mono uppercase tracking-wider font-semibold">
           {language || "code"}
         </span>
-        <button
-          onClick={handleCopy}
+        <PressButton
+          onPress={handleCopy}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
           title="Copy code"
         >
@@ -79,7 +80,7 @@ export function CodeBlock({ code, language, compact }: CodeBlockProps) {
               <span className="text-[10px]">Copy</span>
             </>
           )}
-        </button>
+        </PressButton>
       </div>
       <pre
         className={clsx(

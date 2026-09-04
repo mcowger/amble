@@ -11,7 +11,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Button } from "../ui/button";
+import { Button, PressButton } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import {
   Folder,
@@ -138,16 +138,16 @@ function DirectoryPathInput({
         <div className="absolute right-2.5 flex items-center gap-1">
           {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
           {value && !disabled && (
-            <button
+            <PressButton
               type="button"
-              onClick={() => {
+              onPress={() => {
                 onChange("");
                 setIsOpen(true);
               }}
               className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
             >
               <X className="w-3 h-3" />
-            </button>
+            </PressButton>
           )}
         </div>
       </div>
@@ -160,10 +160,10 @@ function DirectoryPathInput({
           <ScrollArea className="max-h-48" viewportClassName="max-h-48">
             <div className="p-1 space-y-0.5">
               {suggestions.map((dir) => (
-                <button
+                <PressButton
                   key={dir}
                   type="button"
-                  onClick={() => {
+                  onPress={() => {
                     onChange(dir);
                     setIsOpen(false);
                   }}
@@ -174,7 +174,7 @@ function DirectoryPathInput({
                 >
                   <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="truncate">{dir}</span>
-                </button>
+                </PressButton>
               ))}
             </div>
           </ScrollArea>
@@ -463,7 +463,7 @@ export function RegisterProjectModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={onClose}
+                  onPress={onClose}
                   className="text-xs"
                   disabled={isSubmitting}
                 >
@@ -550,7 +550,7 @@ export function RegisterProjectModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={onClose}
+                  onPress={onClose}
                   className="text-xs"
                   disabled={isSubmitting}
                 >
@@ -603,16 +603,16 @@ export function RegisterProjectModal({
                   <div className="absolute right-2.5 flex items-center gap-1">
                     {isSearchingGithub && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
                     {githubQuery && !isSubmitting && (
-                      <button
+                      <PressButton
                         type="button"
-                        onClick={() => {
+                        onPress={() => {
                           setGithubQuery("");
                           setGithubSearchResults([]);
                         }}
                         className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         <X className="w-3 h-3" />
-                      </button>
+                      </PressButton>
                     )}
                   </div>
                 </div>
@@ -626,10 +626,10 @@ export function RegisterProjectModal({
                 {githubSearchResults.length > 0 && (
                   <div className="border border-border rounded-lg bg-card/60 divide-y divide-border/40 overflow-hidden max-h-36 overflow-y-auto mt-1">
                     {githubSearchResults.map((repo) => (
-                      <button
+                      <PressButton
                         key={repo.id}
                         type="button"
-                        onClick={() => {
+                        onPress={() => {
                           setGithubQuery(repo.nameWithOwner);
                           setGithubSearchResults([]);
                         }}
@@ -655,7 +655,7 @@ export function RegisterProjectModal({
                             </p>
                           )}
                         </div>
-                      </button>
+                      </PressButton>
                     ))}
                   </div>
                 )}
@@ -685,9 +685,9 @@ export function RegisterProjectModal({
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">Clone Protocol</Label>
                 <div className="flex items-center gap-2">
-                  <button
+                  <PressButton
                     type="button"
-                    onClick={() => setCloneProtocol("https")}
+                    onPress={() => setCloneProtocol("https")}
                     disabled={isSubmitting}
                     className={cn(
                       "px-3 py-1 rounded-md text-xs font-mono border transition-colors cursor-pointer",
@@ -697,10 +697,10 @@ export function RegisterProjectModal({
                     )}
                   >
                     HTTPS
-                  </button>
-                  <button
+                  </PressButton>
+                  <PressButton
                     type="button"
-                    onClick={() => setCloneProtocol("ssh")}
+                    onPress={() => setCloneProtocol("ssh")}
                     disabled={isSubmitting}
                     className={cn(
                       "px-3 py-1 rounded-md text-xs font-mono border transition-colors cursor-pointer",
@@ -710,7 +710,7 @@ export function RegisterProjectModal({
                     )}
                   >
                     SSH
-                  </button>
+                  </PressButton>
                 </div>
               </div>
 
@@ -727,7 +727,7 @@ export function RegisterProjectModal({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={onClose}
+                  onPress={onClose}
                   className="text-xs"
                   disabled={isSubmitting}
                 >

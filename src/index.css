@@ -1,5 +1,24 @@
 @import "../styles/globals.css";
 
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) {
+    :root {
+      --safe-area-top: max(env(safe-area-inset-top, 0px), 50px);
+      --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+    }
+  }
+}
+
+.ios-pwa-standalone {
+  --safe-area-top: max(env(safe-area-inset-top, 0px), 50px);
+  --safe-area-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+}
+
 @layer base {
   :root {
     @apply font-sans;

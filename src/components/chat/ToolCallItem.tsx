@@ -21,6 +21,7 @@ import { SubagentCallItem } from "./SubagentCallItem";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { formatRelativePath, stripCwdFromText } from "../../lib/utils";
 import { isSubagentToolCall } from "../../lib/subagent-helpers";
+import { PressButton } from "../ui/button";
 import type { ToolCallTimelineItem } from "../../lib/paseo/types";
 import {
   extractFilePathFromDiff,
@@ -42,22 +43,21 @@ function formatContent(value: unknown): string {
 function CopyButton({ text, title = "Copy" }: { text: string; title?: string }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = () => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   return (
-    <button
+    <PressButton
       type="button"
-      onClick={handleCopy}
+      onPress={handleCopy}
       className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent/80 cursor-pointer transition-colors"
       title={title}
     >
       {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-    </button>
+    </PressButton>
   );
 }
 
@@ -596,9 +596,9 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
   return (
     <div className="my-2 rounded-lg border border-border bg-card/70 text-xs overflow-hidden">
       {/* Tool Header Row */}
-      <button
+      <PressButton
         type="button"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onPress={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-3 sm:px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[38px] text-left hover:bg-accent/50 cursor-pointer select-none transition-colors touch-manipulation"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
@@ -629,7 +629,7 @@ export function ToolCallItem({ item }: { item: ToolCallTimelineItem }) {
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
-      </button>
+      </PressButton>
 
       {/* Expanded Details / Diff / Input / Output */}
       {isExpanded ? (

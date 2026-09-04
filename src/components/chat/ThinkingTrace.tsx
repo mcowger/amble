@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Brain, ChevronDown, ChevronRight, Sparkles, Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+import { PressButton } from "../ui/button";
 
 interface ThinkingTraceProps {
   text: string;
@@ -39,9 +40,9 @@ export function ThinkingTrace({
   return (
     <div className="my-2.5 rounded-lg border border-border/60 bg-muted/20 overflow-hidden text-xs">
       {/* Header */}
-      <button
+      <PressButton
         type="button"
-        onClick={handleToggle}
+        onPress={handleToggle}
         className="w-full flex items-center justify-between px-3 sm:px-3 py-2.5 sm:py-2 min-h-[44px] sm:min-h-[36px] text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer select-none transition-colors touch-manipulation"
       >
         <div className="flex items-center gap-2">
@@ -63,7 +64,7 @@ export function ThinkingTrace({
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
-      </button>
+      </PressButton>
 
       {/* Expanded Thought Details */}
       {isExpanded && (

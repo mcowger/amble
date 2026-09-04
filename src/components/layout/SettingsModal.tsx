@@ -11,7 +11,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Button } from "../ui/button";
+import { Button, PressButton } from "../ui/button";
 import { Server, Key, Moon, Sun, Monitor, RefreshCw, CheckCircle2, Sparkles } from "lucide-react";
 
 interface SettingsModalProps {
@@ -118,15 +118,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <Server className="w-5 h-5 text-primary" />
               <span>Settings & Connection</span>
             </DialogTitle>
-            <button
+            <PressButton
               type="button"
-              onClick={() => setTheme(isDark ? "light" : "dark")}
+              onPress={() => setTheme(isDark ? "light" : "dark")}
               className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
               title={`Switch to ${isDark ? "light" : "dark"} theme`}
               aria-label="Toggle Theme"
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
+            </PressButton>
           </div>
           <DialogDescription>
             Configure your Paseo daemon connection and client preferences.
@@ -171,9 +171,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Appearance / Theme</Label>
             <div className="grid grid-cols-3 gap-2">
-              <button
+              <PressButton
                 type="button"
-                onClick={() => setTheme("light")}
+                onPress={() => setTheme("light")}
                 className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "light"
                     ? "border-primary bg-primary/10 text-primary"
@@ -182,10 +182,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               >
                 <Sun className="w-3.5 h-3.5" />
                 Light
-              </button>
-              <button
+              </PressButton>
+              <PressButton
                 type="button"
-                onClick={() => setTheme("dark")}
+                onPress={() => setTheme("dark")}
                 className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "dark"
                     ? "border-primary bg-primary/10 text-primary"
@@ -194,10 +194,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               >
                 <Moon className="w-3.5 h-3.5" />
                 Dark
-              </button>
-              <button
+              </PressButton>
+              <PressButton
                 type="button"
-                onClick={() => setTheme("system")}
+                onPress={() => setTheme("system")}
                 className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium border cursor-pointer transition-colors ${
                   theme === "system"
                     ? "border-primary bg-primary/10 text-primary"
@@ -206,7 +206,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               >
                 <Monitor className="w-3.5 h-3.5" />
                 System
-              </button>
+              </PressButton>
             </div>
           </div>
 
@@ -252,10 +252,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   {availableProfiles.map((p) => {
                     const isSelected = metaProvider === p.provider && metaModel === p.model;
                     return (
-                      <button
+                      <PressButton
                         key={p.id}
                         type="button"
-                        onClick={() => {
+                        onPress={() => {
                           setMetaProvider(p.provider);
                           setMetaModel(p.model);
                         }}
@@ -267,7 +267,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         title={`${p.provider}: ${p.model}`}
                       >
                         {p.name || p.model}
-                      </button>
+                      </PressButton>
                     );
                   })}
                 </div>
@@ -316,7 +316,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={onClose}
+              onPress={onClose}
               className="text-xs"
             >
               Cancel

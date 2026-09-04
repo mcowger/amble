@@ -6,7 +6,7 @@ import { EffortSelector } from "./EffortSelector";
 import { SlashCommands, type SlashCommandItem } from "./SlashCommands";
 import { FileMentionPopup } from "./FileMentionPopup";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Button } from "../ui/button";
+import { Button, PressButton } from "../ui/button";
 import { ButtonGroup, ButtonGroupSeparator } from "../ui/button-group";
 import type { ImageAttachment, ActiveTurnBehavior, QueuedFollowup } from "../../lib/paseo/types";
 import {
@@ -179,44 +179,48 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
     let dragCounter = 0;
 
     const handleWindowDragEnter = (e: DragEvent) => {
-      e.preventDefault();
       if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
         dragCounter++;
         setIsDraggingOver(true);
       }
     };
 
     const handleWindowDragLeave = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter--;
-      if (dragCounter <= 0) {
-        dragCounter = 0;
-        setIsDraggingOver(false);
+      if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          setIsDraggingOver(false);
+        }
       }
     };
 
     const handleWindowDragOver = (e: DragEvent) => {
-      e.preventDefault();
       if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
         setIsDraggingOver(true);
       }
     };
 
     const handleWindowDrop = (e: DragEvent) => {
-      e.preventDefault();
-      dragCounter = 0;
-      setIsDraggingOver(false);
+      if (e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
+        dragCounter = 0;
+        setIsDraggingOver(false);
 
-      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-        const imageFiles: File[] = [];
-        for (let i = 0; i < e.dataTransfer.files.length; i++) {
-          const file = e.dataTransfer.files[i];
-          if (file && file.type.startsWith("image/")) {
-            imageFiles.push(file);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const imageFiles: File[] = [];
+          for (let i = 0; i < e.dataTransfer.files.length; i++) {
+            const file = e.dataTransfer.files[i];
+            if (file && file.type.startsWith("image/")) {
+              imageFiles.push(file);
+            }
           }
-        }
-        if (imageFiles.length > 0) {
-          handleAddFiles(imageFiles);
+          if (imageFiles.length > 0) {
+            handleAddFiles(imageFiles);
+          }
         }
       }
     };
@@ -498,7 +502,10 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
   };
 
   return (
-    <div className="relative max-w-4xl w-full mx-auto p-2 sm:p-4 pt-0 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shrink-0 min-w-0">
+    <div
+      style={{ paddingBottom: "max(0.5rem, var(--safe-area-bottom, 0px))" }}
+      className="relative max-w-4xl w-full mx-auto p-2 sm:p-4 pt-0 shrink-0 min-w-0"
+    >
       {/* Popups */}
       {slashFilter !== null && (
         <SlashCommands
@@ -540,7 +547,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
       <div
         onClick={(e) => {
           const target = e.target as HTMLElement;
-          if (!target.closest("button, input, [role='button'], [data-radix-collection-item], a")) {
+          if (!target.closest("button, input, textarea, select, [role='button'], [data-radix-collection-item], a")) {
             textareaRef.current?.focus();
           }
         }}
@@ -548,7 +555,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
           isDraggingOver
             ? "border-primary ring-2 ring-primary/20 bg-primary/5"
             : "border-border bg-card"
-        } shadow-lg p-3 space-y-2 text-card-foreground transition-colors cursor-text`}
+        } shadow-lg p-3 space-y-2 text-card-foreground cursor-text`}
       >
         {/* Error Notification */}
         {imageError && (
@@ -557,13 +564,13 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">{imageError}</span>
             </div>
-            <button
+            <PressButton
               type="button"
-              onClick={() => setImageError(null)}
+              onPress={() => setImageError(null)}
               className="p-0.5 rounded-sm hover:bg-destructive/20 cursor-pointer"
             >
               <X className="w-3 h-3" />
-            </button>
+            </PressButton>
           </div>
         )}
 
@@ -584,15 +591,15 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                     {q.text}
                   </span>
                 </div>
-                <button
+                <PressButton
                   type="button"
-                  onClick={() => handleCancelFollowup(q)}
+                  onPress={() => handleCancelFollowup(q)}
                   className="p-0.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors shrink-0"
                   title="Cancel follow-up"
                   aria-label="Cancel follow-up"
                 >
                   <X className="w-3 h-3" />
-                </button>
+                </PressButton>
               </div>
             ))}
           </div>
@@ -621,14 +628,14 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                     </div>
                   )}
                 </div>
-                <button
+                <PressButton
                   type="button"
-                  onClick={() => removePendingImage(idx)}
+                  onPress={() => removePendingImage(idx)}
                   className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-background/80 cursor-pointer transition-colors"
                   title="Remove image"
                 >
                   <X className="w-3 h-3" />
-                </button>
+                </PressButton>
               </div>
             ))}
           </div>
@@ -663,9 +670,9 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
               className="hidden"
               onChange={handleFileInputChange}
             />
-            <button
+            <PressButton
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onPress={() => fileInputRef.current?.click()}
               className="h-8 sm:h-7 flex items-center justify-center gap-1 px-2.5 sm:px-2 rounded-lg text-xs font-medium bg-muted/60 hover:bg-muted text-foreground border border-border/40 cursor-pointer transition-colors shrink-0 shadow-2xs touch-manipulation"
               title={
                 isVisionCapable
@@ -676,7 +683,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
             >
               <Plus className="w-3.5 h-3.5 text-primary" />
               <span className="hidden sm:inline text-[11px]">Image</span>
-            </button>
+            </PressButton>
 
             {/* Mode, Model & Effort: hidden on mobile during active turn with text so steering controls fit */}
             <div
@@ -692,10 +699,10 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                   {modes.map((m) => {
                     const isActive = m.id === selectedMode;
                     return (
-                      <button
+                      <PressButton
                         key={m.id}
                         type="button"
-                        onClick={() => setSelectedMode(m.id)}
+                        onPress={() => setSelectedMode(m.id)}
                         disabled={!canChangeMode || isActive}
                         className={`h-6 flex items-center gap-1 px-2 rounded-md text-[11px] font-medium transition-colors ${
                           isActive
@@ -716,7 +723,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       >
                         {getModeIcon(m.id)}
                         <span>{m.name}</span>
-                      </button>
+                      </PressButton>
                     );
                   })}
                   </div>
@@ -753,11 +760,11 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                           {modes.map((m) => {
                             const isActive = m.id === selectedMode;
                             return (
-                              <button
+                              <PressButton
                                 key={m.id}
                                 type="button"
                                 disabled={!canChangeMode || isActive}
-                                onClick={() => {
+                                onPress={() => {
                                   setSelectedMode(m.id);
                                   setIsModeMenuOpen(false);
                                 }}
@@ -770,7 +777,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                                 {getModeIcon(m.id)}
                                 <span className="min-w-0 flex-1 truncate">{m.name}</span>
                                 {isActive && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
-                              </button>
+                              </PressButton>
                             );
                           })}
                         </div>
@@ -796,7 +803,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleSend("steer")}
+                      onPress={() => handleSend("steer")}
                       className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground cursor-pointer gap-1.5 touch-manipulation"
                       title="Steer (Enter): inject message into active turn without stopping"
                       aria-label="Steer active turn"
@@ -809,7 +816,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleSend("interrupt")}
+                      onPress={() => handleSend("interrupt")}
                       className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-destructive/15 hover:text-destructive cursor-pointer gap-1.5 transition-colors touch-manipulation"
                       title="Interrupt (⌘↵ / Ctrl+Enter): stop current turn and start new turn"
                       aria-label="Interrupt turn and start new turn"
@@ -822,7 +829,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => handleSend("followup")}
+                      onPress={() => handleSend("followup")}
                       className="h-8 sm:h-7 rounded-none px-2.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-blue-500/15 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer gap-1.5 transition-colors touch-manipulation"
                       title="Follow-up (⌥↵ / Alt+Enter): send message after agent finishes current turn"
                       aria-label="Follow-up after agent finishes"
@@ -832,20 +839,20 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                     </Button>
                   </ButtonGroup>
 
-                  <button
+                  <PressButton
                     type="button"
-                    onClick={cancelTurn}
+                    onPress={cancelTurn}
                     className="h-8 w-8 sm:h-7 sm:w-7 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0 touch-manipulation"
                     title="Stop generation without sending"
                     aria-label="Stop generation"
                   >
                     <Square className="w-3 h-3 fill-current stroke-none" />
-                  </button>
+                  </PressButton>
                 </div>
               ) : (
-                <button
+                <PressButton
                   type="button"
-                  onClick={cancelTurn}
+                  onPress={cancelTurn}
                   className="group relative h-8 w-8 sm:h-7 sm:w-7 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center justify-center cursor-pointer shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0 touch-manipulation"
                   title="Stop generation"
                   aria-label="Stop generation"
@@ -891,12 +898,12 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                       style={{ transformOrigin: "12px 12px" }}
                     />
                   </svg>
-                </button>
+                </PressButton>
               )
             ) : (
-              <button
+              <PressButton
                 type="button"
-                onClick={() => handleSend()}
+                onPress={() => handleSend()}
                 disabled={!hasContent}
                 className={`h-8 w-8 sm:h-7 sm:w-7 rounded-full flex items-center justify-center text-xs font-medium cursor-pointer transition-all shadow-xs shrink-0 touch-manipulation ${
                   hasContent
@@ -907,7 +914,7 @@ export function PromptComposer({ initialValue = "" }: { initialValue?: string })
                 aria-label="Send message"
               >
                 <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
+              </PressButton>
             )}
           </div>
         </div>

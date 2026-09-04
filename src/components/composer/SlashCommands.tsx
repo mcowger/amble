@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Terminal, Eraser, GitCommit, Layers, Sparkles, FileText, Search } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 export interface SlashCommandItem {
   name: string;
@@ -51,10 +52,10 @@ export function SlashCommands({
         {filtered.map((cmd, idx) => {
           const isSelected = idx === selectedIndex;
           return (
-            <button
+            <PressButton
               key={cmd.name}
               type="button"
-              onClick={() => onSelect(cmd)}
+              onPress={() => onSelect(cmd)}
               className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
                 isSelected
                   ? "bg-accent text-accent-foreground shadow-2xs"
@@ -84,7 +85,7 @@ export function SlashCommands({
                   {cmd.description}
                 </div>
               </div>
-            </button>
+            </PressButton>
           );
         })}
       </div>

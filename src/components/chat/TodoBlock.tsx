@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CheckCircle2, Circle, Loader2, ListTodo, ChevronRight, ChevronDown } from "lucide-react";
 import type { TodoTimelineItem, TodoItem } from "../../lib/paseo/types";
+import { PressButton } from "../ui/button";
 
 function renderTodoRow(todo: TodoItem, key: React.Key) {
   const isDone = todo.completed || todo.status === "completed";
@@ -71,9 +72,9 @@ export function TodoItemsList({
   return (
     <div className={className || "space-y-1.5 pt-1"}>
       {/* Collapsible expando for crossed-off tasks */}
-      <button
+      <PressButton
         type="button"
-        onClick={() => setIsCompletedExpanded((prev) => !prev)}
+        onPress={() => setIsCompletedExpanded((prev) => !prev)}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-0.5 select-none w-full text-left cursor-pointer"
         aria-expanded={isCompletedExpanded}
       >
@@ -86,7 +87,7 @@ export function TodoItemsList({
         <span className="font-medium">
           {completedItems.length} completed {completedItems.length === 1 ? "task" : "tasks"}
         </span>
-      </button>
+      </PressButton>
 
       {/* Expanded completed items */}
       {isCompletedExpanded && (

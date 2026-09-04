@@ -13,6 +13,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import type { GitFileChange } from "../../lib/paseo/types";
+import { PressButton } from "../ui/button";
 
 export function ChangesDrawer() {
   const { gitStatus, refreshGitStatus, commitGitChanges } = useWorkspace();
@@ -85,13 +86,13 @@ export function ChangesDrawer() {
             )}
           </div>
 
-          <button
-            onClick={() => refreshGitStatus()}
+          <PressButton
+            onPress={() => refreshGitStatus()}
             className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
             title="Refresh Git Status"
           >
             <RefreshCw className="w-3 h-3" />
-          </button>
+          </PressButton>
         </div>
 
         {/* Changed Files List */}
@@ -106,9 +107,9 @@ export function ChangesDrawer() {
             allFiles.map((file) => {
               const isSelected = currentFile?.path === file.path;
               return (
-                <button
+                <PressButton
                   key={file.path}
-                  onClick={() => setSelectedFile(file)}
+                  onPress={() => setSelectedFile(file)}
                   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left cursor-pointer transition-colors ${
                     isSelected
                       ? "bg-accent text-accent-foreground font-medium shadow-2xs"
@@ -130,7 +131,7 @@ export function ChangesDrawer() {
                       ) : null}
                     </div>
                   )}
-                </button>
+                </PressButton>
               );
             })
           )}
@@ -151,7 +152,7 @@ export function ChangesDrawer() {
               <p className="text-[10px] text-destructive font-mono truncate">{commitError}</p>
             )}
 
-            <button
+            <PressButton
               type="submit"
               disabled={!commitMessage.trim() || isCommitting}
               className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors ${
@@ -171,7 +172,7 @@ export function ChangesDrawer() {
                   <span>{isCommitting ? "Committing..." : "Commit Changes"}</span>
                 </>
               )}
-            </button>
+            </PressButton>
           </form>
         )}
       </div>

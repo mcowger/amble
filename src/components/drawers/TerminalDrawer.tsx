@@ -6,6 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { encodeTerminalInput, encodeTerminalResize } from "../../lib/paseo/binary-codec";
 import { Plus, Terminal as TerminalIcon } from "lucide-react";
+import { PressButton } from "../ui/button";
 import "@xterm/xterm/css/xterm.css";
 
 const darkTheme = {
@@ -58,6 +59,7 @@ export function TerminalDrawer() {
       fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.open(containerRef.current);
+      term.blur();
 
       try {
         if (containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
@@ -189,9 +191,9 @@ export function TerminalDrawer() {
             terminals.map((t) => {
               const isActive = t.slot === activeTerminalSlot;
               return (
-                <button
+                <PressButton
                   key={t.slot}
-                  onClick={() => setActiveTerminalSlot(t.slot)}
+                  onPress={() => setActiveTerminalSlot(t.slot)}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs cursor-pointer transition-colors ${
                     isActive
                       ? "bg-card text-foreground font-medium shadow-2xs border border-border/50"
@@ -200,18 +202,18 @@ export function TerminalDrawer() {
                 >
                   <TerminalIcon className="w-3 h-3 text-amber-500" />
                   <span>{t.title || `Terminal ${t.slot + 1}`}</span>
-                </button>
+                </PressButton>
               );
             })
           )}
 
-          <button
-            onClick={() => createTerminal()}
+          <PressButton
+            onPress={() => createTerminal()}
             className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
             title="Open New Terminal"
           >
             <Plus className="w-3.5 h-3.5" />
-          </button>
+          </PressButton>
         </div>
       </div>
 

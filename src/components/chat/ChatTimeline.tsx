@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useLayoutEffect, useMemo } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { ScrollArea } from "../ui/scroll-area";
+import { PressButton } from "../ui/button";
 import { UserCard } from "./UserCard";
 import { AssistantMessage } from "./AssistantMessage";
 import { ThinkingTrace } from "./ThinkingTrace";
@@ -362,9 +363,9 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
               {/* Prompt suggestions */}
               <div className="w-full space-y-2 pt-2">
                 {samplePrompts.map((item, idx) => (
-                  <button
+                  <PressButton
                     key={idx}
-                    onClick={() => onSelectPrompt?.(item.prompt)}
+                    onPress={() => onSelectPrompt?.(item.prompt)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl border border-border bg-card hover:bg-accent/60 text-left cursor-pointer transition-all hover:shadow-2xs group"
                   >
                     <div className="p-1.5 rounded-lg bg-muted group-hover:bg-background shrink-0">
@@ -374,7 +375,7 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
                       <div className="text-xs font-medium text-foreground">{item.label}</div>
                       <div className="text-[11px] text-muted-foreground truncate">{item.prompt}</div>
                     </div>
-                  </button>
+                  </PressButton>
                 ))}
               </div>
             </div>
@@ -509,13 +510,13 @@ export function ChatTimeline({ onSelectPrompt }: { onSelectPrompt?: (prompt: str
 
       {/* Scroll to bottom button */}
       {showScrollBottom && (
-        <button
-          onClick={scrollToBottomSmooth}
+        <PressButton
+          onPress={scrollToBottomSmooth}
           className="absolute bottom-3 right-4 sm:bottom-4 sm:right-8 p-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 cursor-pointer transition-all z-20"
           title="Scroll to bottom"
         >
           <ArrowDown className="w-4 h-4" />
-        </button>
+        </PressButton>
       )}
     </div>
   );

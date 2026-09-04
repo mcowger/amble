@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { PressButton } from "../ui/button";
 
 export function UserCard({ item }: { item: UserMessageTimelineItem }) {
   const [copied, setCopied] = useState(false);
@@ -69,13 +70,13 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
             </span>
           )}
 
-          <button
-            onClick={handleCopy}
+          <PressButton
+            onPress={handleCopy}
             className="opacity-0 group-hover:opacity-100 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-opacity"
             title="Copy message"
           >
             {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-          </button>
+          </PressButton>
         </div>
       </div>
 
@@ -90,10 +91,10 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
       {item.images && item.images.length > 0 && (
         <div className="flex flex-wrap gap-3 mt-3 pt-2.5 border-t border-border/40">
           {item.images.map((img, idx) => (
-            <div
+            <PressButton
               key={idx}
-              onClick={() => setPreviewImage(img)}
-              className="group/img relative overflow-hidden rounded-xl border border-border/80 bg-muted/40 hover:border-primary/50 cursor-pointer transition-all shadow-xs"
+              onPress={() => setPreviewImage(img)}
+              className="group/img relative block overflow-hidden rounded-xl border border-border/80 bg-muted/40 text-left hover:border-primary/50 cursor-pointer transition-all shadow-xs"
             >
               <img
                 src={`data:${img.mimeType};base64,${img.data}`}
@@ -108,7 +109,7 @@ export function UserCard({ item }: { item: UserMessageTimelineItem }) {
                   {img.name}
                 </div>
               )}
-            </div>
+            </PressButton>
           ))}
         </div>
       )}

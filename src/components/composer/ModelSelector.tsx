@@ -5,6 +5,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Input } from "../ui/input";
 import { Sparkles, ChevronDown, Check, Brain, Search, Eye } from "lucide-react";
 import { formatTokens } from "../../lib/utils";
+import { PressButton } from "../ui/button";
 
 export function ModelSelector() {
   const { models, selectedModel, setSelectedModel } = useWorkspace();
@@ -111,10 +112,10 @@ export function ModelSelector() {
                 const badge = getProviderBadge(model.providerName || model.provider);
 
                 return (
-                  <button
+                  <PressButton
                     key={model.id}
                     type="button"
-                    onClick={() => {
+                    onPress={() => {
                       setSelectedModel(model.id);
                       setIsOpen(false);
                     }}
@@ -163,7 +164,7 @@ export function ModelSelector() {
                     </div>
 
                     {isSelected && <Check className="w-4 h-4 text-primary shrink-0 ml-2" />}
-                  </button>
+                  </PressButton>
                 );
               })
             )}

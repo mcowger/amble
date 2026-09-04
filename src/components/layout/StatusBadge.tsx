@@ -1,14 +1,15 @@
 import React from "react";
 import { usePaseo } from "../../context/PaseoContext";
 import { cn } from "../../lib/utils";
+import { PressButton } from "../ui/button";
 
 export function StatusBadge({ onClick }: { onClick?: () => void }) {
   const { connectionState } = usePaseo();
   const isConnected = connectionState === "connected";
 
   return (
-    <button
-      onClick={onClick}
+    <PressButton
+      onPress={onClick}
       className={cn(
         "h-8 w-8 sm:h-auto sm:w-auto p-1 sm:px-2.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium",
         "flex items-center justify-center sm:inline-flex sm:gap-1.5",
@@ -24,6 +25,6 @@ export function StatusBadge({ onClick }: { onClick?: () => void }) {
         )}
       />
       <span className="hidden sm:inline">{isConnected ? "Ready" : "Disconnected"}</span>
-    </button>
+    </PressButton>
   );
 }

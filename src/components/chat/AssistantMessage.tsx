@@ -3,6 +3,7 @@ import { Sparkles, Copy, Check } from "lucide-react";
 import { formatTime } from "../../lib/utils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import type { AssistantMessageTimelineItem } from "../../lib/paseo/types";
+import { PressButton } from "../ui/button";
 
 export function AssistantMessage({ item }: { item: AssistantMessageTimelineItem }) {
   const [copied, setCopied] = useState(false);
@@ -36,13 +37,13 @@ export function AssistantMessage({ item }: { item: AssistantMessageTimelineItem 
             </span>
           )}
 
-          <button
-            onClick={handleCopy}
+          <PressButton
+            onPress={handleCopy}
             className="opacity-0 group-hover:opacity-100 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-opacity"
             title="Copy message"
           >
             {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-          </button>
+          </PressButton>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { encodeTerminalInput, encodeTerminalResize } from "../../lib/paseo/binary-codec";
 import "@xterm/xterm/css/xterm.css";
+import { PressTarget } from "../ui/button";
 
 interface TerminalViewProps {
   slot: number;
@@ -53,16 +54,7 @@ export function TerminalView({ slot, terminalId, isActive = true }: TerminalView
       fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.open(containerRef.current);
-
-      try {
-        if (containerRef.current.clientWidth > 0 && containerRef.current.clientHeight > 0) {
-          fitAddon.fit();
-        }
-      } catch {
-        // ignore dimension errors on hidden/transitioning tabs
-      }
-
-      term.focus();
+      term.blur();
       xtermRef.current = term;
       fitAddonRef.current = fitAddon;
 
@@ -176,7 +168,6 @@ export function TerminalView({ slot, terminalId, isActive = true }: TerminalView
           client.sendTerminalResize(terminalId, term.cols, term.rows, "claim");
           term.refresh(0, (term.rows || 1) - 1);
         }
-        term?.focus();
       } catch {
         // ignore
       }
@@ -186,11 +177,11 @@ export function TerminalView({ slot, terminalId, isActive = true }: TerminalView
   }, [isActive, client, terminalId, slot]);
 
   return (
-    <div
+    <PressTarget
       className="flex-1 w-full h-full min-h-0 bg-background overflow-hidden p-3"
-      onClick={() => xtermRef.current?.focus()}
+      onPress={() => xtermRef.current?.focus()}
     >
       <div ref={containerRef} className="w-full h-full" />
-    </div>
+    </PressTarget>
   );
 }

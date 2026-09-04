@@ -1,4 +1,8 @@
 import { Slot } from "@radix-ui/react-slot";
+import { useButton } from "@react-aria/button";
+import { usePress } from "@react-aria/interactions";
+import { mergeProps } from "@react-aria/utils";
+import type { PressEvent } from "@react-types/shared";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
@@ -34,19 +38,57 @@ const buttonVariants = cva(
   },
 );
 
+type PressButtonProps = Omit<React.ComponentPropsWithoutRef<"button">, "onClick"> & {
+  onPress?: (event: PressEvent) => void;
+};
+
+const PressButton = React.forwardRef<HTMLButtonElement, PressButtonProps>(
+  ({ onPress, type = "button", disabled, ...props }, forwardedRef) => {
+    const ref = React.useRef<HTMLButtonElement>(null);
+    React.useImperativeHandle(forwardedRef, () => ref.current!);
+    const { buttonProps } = useButton({ isDisabled: disabled, type, onPress }, ref);
+    const mergedProps = mergeProps(props, buttonProps);
+
+    return <button {...mergedProps} disabled={disabled} ref={ref} />;
+  },
+);
+
+PressButton.displayName = "PressButton";
+
+type PressTargetProps = Omit<React.ComponentPropsWithoutRef<"div">, "onClick"> & {
+  onPress?: (event: PressEvent) => void;
+};
+
+const PressTarget = React.forwardRef<HTMLDivElement, PressTargetProps>(
+  ({ onPress, ...props }, forwardedRef) => {
+    const ref = React.useRef<HTMLDivElement>(null);
+    React.useImperativeHandle(forwardedRef, () => ref.current!);
+    const { pressProps } = usePress({ onPress });
+    const mergedProps = mergeProps(props, pressProps);
+
+    return <div {...mergedProps} ref={ref} />;
+  },
+);
+
+PressTarget.displayName = "PressTarget";
+
 function Button({
   className,
   variant,
   size,
   asChild = false,
   ...props
-}: React.ComponentProps<"button"> &
+}: PressButtonProps &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
   }) {
-  const Comp = asChild ? Slot : "button";
+  const classNames = cn(buttonVariants({ variant, size, className }));
 
-  return <Comp data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  if (asChild) {
+    return <Slot data-slot="button" className={classNames} {...props} />;
+  }
+
+  return <PressButton data-slot="button" className={classNames} {...props} />;
 }
 
-export { Button, buttonVariants };
+export { Button, buttonVariants, PressButton, PressTarget };

@@ -10,6 +10,7 @@ import {
   GitFork,
   ChevronRight,
 } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 interface BreadcrumbsBarProps {
   onToggleSidebar?: () => void;
@@ -79,47 +80,53 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
   };
 
   return (
-    <div className="min-h-8 h-[calc(2rem+env(safe-area-inset-top,0px))] pt-[env(safe-area-inset-top,0px)] border-b border-border/40 bg-sidebar/50 backdrop-blur-xs px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden text-xs">
+    <div
+      style={{
+        paddingTop: "var(--safe-area-top, 0px)",
+        height: "calc(2rem + var(--safe-area-top, 0px))",
+      }}
+      className="min-h-8 border-b border-border/40 bg-sidebar/50 backdrop-blur-xs px-2.5 sm:px-3.5 flex items-center justify-between select-none z-20 shrink-0 overflow-hidden text-xs"
+    >
       {/* Breadcrumbs trail: Project > Worktree > Active Session Title */}
       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 overflow-hidden pr-2">
         {onToggleSidebar && (
-          <button
+          <PressButton
             type="button"
-            onClick={onToggleSidebar}
+            onPress={onToggleSidebar}
             className="h-8 w-8 -ml-1 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer md:hidden shrink-0 touch-manipulation"
             title="Toggle Sessions Menu"
             aria-label="Toggle Sessions Menu"
           >
             <Menu className="w-4 h-4" />
-          </button>
+          </PressButton>
         )}
 
         {/* Head entry: Project */}
         {project && (
-          <button
+          <PressButton
             type="button"
-            onClick={handleSelectProject}
+            onPress={handleSelectProject}
             className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer shrink-0 max-w-[140px] sm:max-w-[200px]"
             title={`Project: ${projectName || project.name}`}
           >
             <ProjectIcon project={project} client={client} />
             <span className="truncate">{projectName || project.name}</span>
-          </button>
+          </PressButton>
         )}
 
         {/* Head entry: Worktree (if relevant) */}
         {project && isWorktree && worktreeLabel && (
           <>
             <ChevronRight className="w-3 h-3 text-muted-foreground/40 shrink-0 select-none" />
-            <button
+            <PressButton
               type="button"
-              onClick={handleSelectWorktree}
+              onPress={handleSelectWorktree}
               className="flex items-center gap-1 sm:gap-1.5 px-1.5 py-0.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors truncate cursor-pointer font-mono shrink-0 max-w-[180px] sm:max-w-[260px]"
               title={worktreeTooltip || `Worktree: ${worktreeLabel}`}
             >
               <GitFork className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{worktreeLabel}</span>
-            </button>
+            </PressButton>
           </>
         )}
 
@@ -159,21 +166,21 @@ export function BreadcrumbsBar({ onToggleSidebar }: BreadcrumbsBarProps) {
           </form>
         ) : (
           <div className="group flex items-center gap-1.5 text-xs text-muted-foreground min-w-0 flex-1">
-            <span
-              onClick={handleStartRename}
-              className="truncate font-semibold text-foreground tracking-tight hover:underline cursor-pointer min-w-0"
+            <PressButton
+              onPress={handleStartRename}
+              className="truncate font-semibold text-left text-foreground tracking-tight hover:underline cursor-pointer min-w-0"
               title="Click to rename session"
             >
               {activeAgent?.title || activeAgent?.name || "Session"}
-            </span>
-            <button
+            </PressButton>
+            <PressButton
               type="button"
-              onClick={handleStartRename}
+              onPress={handleStartRename}
               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-opacity cursor-pointer shrink-0 hidden sm:block"
               title="Rename session"
             >
               <Pencil className="w-3 h-3" />
-            </button>
+            </PressButton>
           </div>
         )}
       </div>

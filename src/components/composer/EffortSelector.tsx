@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { Brain, ChevronDown, Check } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 export function EffortSelector() {
   const { models, selectedModel, thinkingEffort, setThinkingEffort } = useWorkspace();
@@ -52,10 +53,10 @@ export function EffortSelector() {
           {options.map((opt) => {
             const isSelected = opt.id === thinkingEffort;
             return (
-              <button
+              <PressButton
                 key={opt.id}
                 type="button"
-                onClick={() => {
+                onPress={() => {
                   setThinkingEffort(opt.id);
                   setIsOpen(false);
                 }}
@@ -67,7 +68,7 @@ export function EffortSelector() {
               >
                 <div className="capitalize font-medium">{opt.label}</div>
                 {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-              </button>
+              </PressButton>
             );
           })}
         </div>

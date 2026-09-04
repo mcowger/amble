@@ -10,6 +10,7 @@ import {
   LayoutList,
   ListCollapse,
 } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 interface TopRailProps {
   onOpenSettings: () => void;
@@ -42,9 +43,9 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
 
         {/* Action icons */}
         <div className="flex items-center gap-0.5 border-l border-border/60 pl-1 sm:pl-2">
-          <button
+          <PressButton
             type="button"
-            onClick={() => setSummaryMode((prev) => !prev)}
+            onPress={() => setSummaryMode((prev) => !prev)}
             className={cn(
               "h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors touch-manipulation",
               summaryMode
@@ -59,17 +60,17 @@ export function TopRail({ onOpenSettings }: TopRailProps) {
             ) : (
               <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             )}
-          </button>
+          </PressButton>
 
-          <button
+          <PressButton
             type="button"
-            onClick={onOpenSettings}
+            onPress={onOpenSettings}
             className="h-8 w-8 sm:h-7 sm:w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="Open Settings"
             aria-label="Open Settings"
           >
             <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
+          </PressButton>
         </div>
       </div>
     </header>

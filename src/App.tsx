@@ -33,24 +33,18 @@ function WorkspaceMain() {
         <WorkspaceTabsRow />
 
         {/* Tab Content */}
-        {/* Terminals: keep open terminal tabs mounted so background output, scrollback, and state persist across tab switching */}
+        {/* Only render the active terminal. PaseoClient retains output for replay on remount. */}
         {terminalTabs.map((tab) => {
           const isActive =
             activeTab?.kind === "terminal" && activeTab?.targetId === tab.targetId;
+          if (!isActive) return null;
+
           return (
             <div
               key={tab.id}
-              className={
-                isActive
-                  ? "flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col"
-                  : "hidden"
-              }
+              className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col"
             >
-              <TerminalView
-                slot={tab.slot ?? 0}
-                terminalId={tab.targetId}
-                isActive={isActive}
-              />
+              <TerminalView slot={tab.slot ?? 0} terminalId={tab.targetId} isActive />
             </div>
           );
         })}

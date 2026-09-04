@@ -1,5 +1,6 @@
 import React from "react";
 import { FileCode, FileText } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 interface FileMentionPopupProps {
   filter: string;
@@ -21,15 +22,15 @@ export function FileMentionPopup({ filter, files, onSelect }: FileMentionPopupPr
       </div>
       <div className="max-h-52 overflow-y-auto space-y-0.5">
         {filtered.map((filePath) => (
-          <button
+          <PressButton
             key={filePath}
             type="button"
-            onClick={() => onSelect(filePath)}
+            onPress={() => onSelect(filePath)}
             className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left hover:bg-accent cursor-pointer transition-colors"
           >
             <FileCode className="w-3.5 h-3.5 text-primary shrink-0" />
             <span className="font-mono text-foreground truncate text-[11px]">{filePath}</span>
-          </button>
+          </PressButton>
         ))}
       </div>
     </div>

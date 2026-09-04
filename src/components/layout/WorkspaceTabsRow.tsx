@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useWorkspace, type WorkspaceTabItem } from "../../context/WorkspaceContext";
 import { Sparkles, Terminal, GitCommit, X, Loader2, Pencil } from "lucide-react";
+import { PressButton, PressTarget } from "../ui/button";
 
 export function WorkspaceTabsRow() {
   const {
@@ -46,9 +47,9 @@ export function WorkspaceTabsRow() {
           const isEditing = renamingTabId === tab.id;
 
           return (
-            <div
+            <PressTarget
               key={tab.id}
-              onClick={() => setActiveTab(tab)}
+              onPress={() => setActiveTab(tab)}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 startRename(tab);
@@ -114,59 +115,57 @@ export function WorkspaceTabsRow() {
               {!isEditing && (
                 <div className="flex items-center gap-0.5 shrink-0">
                   {tab.kind !== "changes" && (
-                    <button
+                    <PressButton
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onPress={() => {
                         startRename(tab);
                       }}
                       className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-opacity"
                       title="Rename tab"
                     >
                       <Pencil className="w-2.5 h-2.5" />
-                    </button>
+                    </PressButton>
                   )}
 
-                  <button
+                  <PressButton
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onPress={() => {
                       closeTab(tab);
                     }}
                     className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer transition-opacity"
                     title={`Close ${tab.kind === "agent" ? "session" : tab.kind === "terminal" ? "terminal" : "changes"}`}
                   >
                     <X className="w-3 h-3" />
-                  </button>
+                  </PressButton>
                 </div>
               )}
-            </div>
+            </PressTarget>
           );
         })}
 
         {/* 3 New Tab Action Buttons: Agent, Terminal, Changes */}
         <div className="flex items-center gap-0.5 shrink-0 pl-1 border-l border-border/40 ml-1">
-          <button
+          <PressButton
             type="button"
-            onClick={() => createAgentTab()}
+            onPress={() => createAgentTab()}
             className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="New Agent Session"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          </button>
+          </PressButton>
 
-          <button
+          <PressButton
             type="button"
-            onClick={() => createTerminalTab()}
+            onPress={() => createTerminalTab()}
             className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors touch-manipulation"
             title="New Terminal"
           >
             <Terminal className="w-3.5 h-3.5 text-amber-500" />
-          </button>
+          </PressButton>
 
-          <button
+          <PressButton
             type="button"
-            onClick={() => openChangesTab()}
+            onPress={() => openChangesTab()}
             className={`h-7 w-7 flex items-center justify-center rounded-md cursor-pointer transition-colors relative touch-manipulation ${
               activeTab?.kind === "changes"
                 ? "bg-accent text-foreground"
@@ -178,7 +177,7 @@ export function WorkspaceTabsRow() {
             {changedFilesCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
             )}
-          </button>
+          </PressButton>
         </div>
       </div>
     </div>

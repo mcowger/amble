@@ -16,6 +16,7 @@ import type {
   AgentPermissionAction,
   QuestionFormQuestion,
 } from "../../lib/paseo/types";
+import { PressButton } from "../ui/button";
 
 interface PendingPermissionCardProps {
   permission: PendingPermission;
@@ -273,10 +274,10 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
           {parsedQuestions.length > 1 && (
             <div className="flex items-center gap-1">
               {parsedQuestions.map((_, idx) => (
-                <button
+                <PressButton
                   key={idx}
                   type="button"
-                  onClick={() => setActiveQuestionIdx(idx)}
+                  onPress={() => setActiveQuestionIdx(idx)}
                   className={`w-2 h-2 rounded-full transition-colors ${
                     idx === activeQuestionIdx
                       ? "bg-primary"
@@ -303,11 +304,11 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
             {currentQuestion.options.map((opt, optIdx) => {
               const isSelected = selections[activeQuestionIdx]?.has(optIdx) ?? false;
               return (
-                <button
+                <PressButton
                   key={optIdx}
                   type="button"
                   disabled={isResponding}
-                  onClick={() =>
+                  onPress={() =>
                     handleToggleOption(activeQuestionIdx, optIdx, currentQuestion.multiSelect)
                   }
                   className={`w-full flex items-start gap-2.5 p-2.5 rounded-lg border text-left text-xs transition-colors cursor-pointer select-none ${
@@ -337,7 +338,7 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
                       </div>
                     )}
                   </div>
-                </button>
+                </PressButton>
               );
             })}
           </div>
@@ -364,10 +365,10 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
-          <button
+          <PressButton
             type="button"
             disabled={isResponding}
-            onClick={handleQuestionDismiss}
+            onPress={handleQuestionDismiss}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
           >
             {isResponding && respondingActionId === "dismiss" ? (
@@ -376,36 +377,36 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
               <X className="w-3 h-3" />
             )}
             <span>{currentQuestion.dismissLabel || "Dismiss"}</span>
-          </button>
+          </PressButton>
 
           <div className="flex items-center gap-2">
             {parsedQuestions.length > 1 && activeQuestionIdx > 0 && (
-              <button
+              <PressButton
                 type="button"
                 disabled={isResponding}
-                onClick={() => setActiveQuestionIdx((prev) => Math.max(0, prev - 1))}
+                onPress={() => setActiveQuestionIdx((prev) => Math.max(0, prev - 1))}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border/70 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 cursor-pointer transition-colors"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Previous</span>
-              </button>
+              </PressButton>
             )}
 
             {!isLastQuestion ? (
-              <button
+              <PressButton
                 type="button"
                 disabled={isResponding || !isCurrentAnswered}
-                onClick={() => setActiveQuestionIdx((prev) => prev + 1)}
+                onPress={() => setActiveQuestionIdx((prev) => prev + 1)}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 cursor-pointer transition-colors"
               >
                 <span>Next</span>
                 <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              </PressButton>
             ) : (
-              <button
+              <PressButton
                 type="button"
                 disabled={isResponding || !allQuestionsAnswered}
-                onClick={handleQuestionSubmit}
+                onPress={handleQuestionSubmit}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 cursor-pointer transition-colors"
               >
                 {isResponding && respondingActionId === "submit" ? (
@@ -414,7 +415,7 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
                   <Check className="w-3.5 h-3.5" />
                 )}
                 <span>Submit</span>
-              </button>
+              </PressButton>
             )}
           </div>
         </div>
@@ -474,11 +475,11 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
             const isCurrentResponding = isResponding && respondingActionId === action.id;
 
             return (
-              <button
+              <PressButton
                 key={action.id}
                 type="button"
                 disabled={isResponding}
-                onClick={() => handleActionClick(action)}
+                onPress={() => handleActionClick(action)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors select-none ${
                   isPrimary
                     ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
@@ -495,7 +496,7 @@ export function PendingPermissionCard({ permission, onRespond }: PendingPermissi
                   <Check className="w-3.5 h-3.5" />
                 )}
                 <span>{action.label}</span>
-              </button>
+              </PressButton>
             );
           })}
         </div>

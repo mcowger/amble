@@ -3,6 +3,7 @@ import { FileCode, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { formatRelativePath } from "../../lib/utils";
 import { countDiffStats, type DiffStats } from "./diff-utils";
+import { PressButton } from "../ui/button";
 
 interface DiffViewerProps {
   filePath?: string;
@@ -68,14 +69,14 @@ export function DiffViewer({ filePath, diffText, oldString, newString, stats }: 
     <div className="rounded-lg border border-border bg-card overflow-hidden my-2 text-xs font-mono">
       {/* File Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b border-border select-none">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
+        <PressButton
+          onPress={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 text-foreground font-medium hover:text-primary cursor-pointer truncate"
         >
           {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           <FileCode className="w-4 h-4 text-primary shrink-0" />
           <span className="truncate">{displayPath}</span>
-        </button>
+        </PressButton>
 
         <div className="flex items-center gap-2">
           {(additions > 0 || deletions > 0) && (
@@ -85,13 +86,13 @@ export function DiffViewer({ filePath, diffText, oldString, newString, stats }: 
             </div>
           )}
 
-          <button
-            onClick={handleCopy}
+          <PressButton
+            onPress={handleCopy}
             className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
             title="Copy diff"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
+          </PressButton>
         </div>
       </div>
 

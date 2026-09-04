@@ -38,7 +38,7 @@ import {
   DialogFooter,
 } from "../ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
-import { Button } from "../ui/button";
+import { Button, PressButton, PressTarget } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
@@ -140,10 +140,10 @@ function BranchCombobox({
             {filteredBranches.map((branch) => {
               const isSelected = branch === value;
               return (
-                <button
+                <PressButton
                   key={branch}
                   type="button"
-                  onClick={() => {
+                  onPress={() => {
                     onChange(branch);
                     setOpen(false);
                     setFilter("");
@@ -159,14 +159,14 @@ function BranchCombobox({
                     <span className="truncate">{branch}</span>
                   </div>
                   {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />}
-                </button>
+                </PressButton>
               );
             })}
 
             {filter.trim() && !hasExactMatch && (
-              <button
+              <PressButton
                 type="button"
-                onClick={() => {
+                onPress={() => {
                   onChange(filter.trim());
                   setOpen(false);
                   setFilter("");
@@ -175,7 +175,7 @@ function BranchCombobox({
               >
                 <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
                 <span className="truncate">Use &quot;{filter.trim()}&quot;</span>
-              </button>
+              </PressButton>
             )}
 
             {filteredBranches.length === 0 && !filter.trim() && (
@@ -407,13 +407,13 @@ export function CreateWorktreeModal({
                     Branch / Worktree Name
                   </Label>
                   {featureDescription && (
-                    <button
+                    <PressButton
                       type="button"
-                      onClick={() => setBranchName(slugify(featureDescription).slice(0, 40))}
+                      onPress={() => setBranchName(slugify(featureDescription).slice(0, 40))}
                       className="text-[11px] text-primary hover:underline cursor-pointer"
                     >
                       Use suggested slug
-                    </button>
+                    </PressButton>
                   )}
                 </div>
                 <Input
@@ -525,7 +525,7 @@ export function CreateWorktreeModal({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={onClose}
+              onPress={onClose}
               className="text-xs"
               disabled={isSubmitting}
             >
@@ -773,25 +773,25 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
           Projects
         </span>
         <div className="flex items-center gap-1">
-          <button
+          <PressButton
             type="button"
-            onClick={() => setIsRegisterProjectOpen(true)}
+            onPress={() => setIsRegisterProjectOpen(true)}
             className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer transition-colors touch-manipulation"
             title="Register new project"
             aria-label="Register new project"
           >
             <Plus className="w-4 h-4" />
-          </button>
+          </PressButton>
           {isMobile && onCloseMobile && (
-            <button
+            <PressButton
               type="button"
-              onClick={onCloseMobile}
+              onPress={onCloseMobile}
               className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 cursor-pointer md:hidden transition-colors touch-manipulation"
               title="Close sidebar"
               aria-label="Close sidebar"
             >
               <X className="w-4 h-4" />
-            </button>
+            </PressButton>
           )}
         </div>
       </div>
@@ -812,18 +812,17 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
             return (
               <div key={project.id || project.name} className="space-y-0.5">
                 {/* Project Header */}
-                <div
-                  onClick={() => {
+                <PressTarget
+                  onPress={() => {
                     toggleProjectCollapse(project.id, isProjectCollapsed);
                     handleSelectProject(project, directWorkspace);
                   }}
                   className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <button
+                    <PressButton
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onPress={() => {
                         toggleProjectCollapse(project.id, isProjectCollapsed);
                       }}
                       className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
@@ -834,7 +833,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                           !isProjectCollapsed ? "rotate-90" : ""
                         }`}
                       />
-                    </button>
+                    </PressButton>
 
                     <ProjectIcon project={project} client={client} />
                     <span className="font-semibold text-xs tracking-tight lowercase truncate">
@@ -843,28 +842,26 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                   </div>
 
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    <PressButton
+                      onPress={() => {
                         setTargetWorktreeProject(project);
                       }}
                       className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
                       title={`New worktree in ${project.name}`}
                     >
                       <GitFork className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                    </PressButton>
+                    <PressButton
+                      onPress={() => {
                         handleNewSession(directWorkspace?.id || project.id);
                       }}
                       className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer"
                       title={`New session in ${project.name}`}
                     >
                       <Plus className="w-3 h-3" />
-                    </button>
+                    </PressButton>
                   </div>
-                </div>
+                </PressTarget>
 
                 {/* Project Body (Direct Sessions + Worktrees + Empty state) */}
                 {!isProjectCollapsed && (
@@ -876,8 +873,8 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
 
                       return (
                         <div key={session.id} className="pl-6 pr-1">
-                          <div
-                            onClick={() =>
+                          <PressTarget
+                            onPress={() =>
                               handleSelectSession(
                                 session.id,
                                 session.workspaceId || directWorkspace?.id || project.id,
@@ -908,7 +905,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                 {elapsed}
                               </span>
                             )}
-                          </div>
+                          </PressTarget>
                         </div>
                       );
                     })}
@@ -953,9 +950,9 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                 className="flex-1 bg-background border border-border rounded px-1.5 py-0.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                                 autoFocus
                               />
-                              <button
+                              <PressButton
                                 type="button"
-                                onClick={async () => {
+                                onPress={async () => {
                                   if (editingTitle.trim() && wt.workspaceId) {
                                     await updateWorkspaceTitle(wt.workspaceId, editingTitle.trim());
                                   }
@@ -965,19 +962,19 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                 title="Save title"
                               >
                                 <Check className="w-3 h-3" />
-                              </button>
-                              <button
+                              </PressButton>
+                              <PressButton
                                 type="button"
-                                onClick={() => setEditingWorkspaceId(null)}
+                                onPress={() => setEditingWorkspaceId(null)}
                                 className="p-0.5 rounded hover:bg-accent text-muted-foreground cursor-pointer"
                                 title="Cancel"
                               >
                                 <X className="w-3 h-3" />
-                              </button>
+                              </PressButton>
                             </div>
                           ) : (
-                            <div
-                              onClick={() => {
+                            <PressTarget
+                              onPress={() => {
                                 if (hasWorktreeChildren) {
                                   toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
                                 }
@@ -988,10 +985,9 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                             >
                               <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-1">
                                 {hasWorktreeChildren ? (
-                                  <button
+                                  <PressButton
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
+                                    onPress={() => {
                                       toggleWorktreeCollapse(wtKey, isWorktreeCollapsed);
                                     }}
                                     className="p-0.5 rounded text-muted-foreground/60 hover:text-foreground cursor-pointer shrink-0"
@@ -1002,7 +998,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                         !isWorktreeCollapsed ? "rotate-90" : ""
                                       }`}
                                     />
-                                  </button>
+                                  </PressButton>
                                 ) : (
                                   <span className="w-4 shrink-0" />
                                 )}
@@ -1022,10 +1018,9 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                               </div>
                               <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {wt.workspaceId && (
-                                  <button
+                                  <PressButton
                                     type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
+                                    onPress={() => {
                                       setEditingWorkspaceId(wt.workspaceId);
                                       setEditingTitle(wt.title || wt.branch);
                                     }}
@@ -1033,21 +1028,20 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                     title="Rename feature title"
                                   >
                                     <Pencil className="w-3 h-3" />
-                                  </button>
+                                  </PressButton>
                                 )}
-                                <button
+                                <PressButton
                                   type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                  onPress={() => {
                                     handleNewSession(wt.workspaceId || directWorkspace?.id || project.id);
                                   }}
                                   className="p-0.5 rounded hover:text-foreground hover:bg-accent cursor-pointer"
                                   title={`New session in ${wt.branch}`}
                                 >
                                   <Plus className="w-3 h-3" />
-                                </button>
+                                </PressButton>
                               </div>
-                            </div>
+                            </PressTarget>
                           )}
 
                           {/* Worktree Sessions */}
@@ -1058,8 +1052,8 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
 
                               return (
                                 <div key={session.id} className="pl-9 pr-1">
-                                  <div
-                                    onClick={() =>
+                                  <PressTarget
+                                    onPress={() =>
                                       handleSelectSession(
                                         session.id,
                                         session.workspaceId || wt.workspaceId || project.id,
@@ -1092,7 +1086,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                                         {elapsed}
                                       </span>
                                     )}
-                                  </div>
+                                  </PressTarget>
                                 </div>
                               );
                             })}
@@ -1111,10 +1105,9 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
 
                     {/* New Worktree Action Item */}
                     <div className="pl-6 pr-1 pt-0.5">
-                      <button
+                      <PressButton
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onPress={() => {
                           setTargetWorktreeProject(project);
                         }}
                         className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] text-muted-foreground/60 hover:text-foreground hover:bg-accent/30 transition-colors cursor-pointer w-full text-left"
@@ -1122,7 +1115,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                       >
                         <GitFork className="w-3 h-3 opacity-60 shrink-0" />
                         <span className="truncate">New worktree...</span>
-                      </button>
+                      </PressButton>
                     </div>
                   </div>
                 )}

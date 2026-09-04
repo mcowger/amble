@@ -3,6 +3,7 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 import { TerminalDrawer } from "./TerminalDrawer";
 import { ChangesDrawer } from "./ChangesDrawer";
 import { Terminal, GitCommit, ChevronDown } from "lucide-react";
+import { PressButton } from "../ui/button";
 
 export function BottomDrawer() {
   const {
@@ -24,8 +25,8 @@ export function BottomDrawer() {
       <div className="h-8 border-b border-border bg-sidebar/50 px-3 flex items-center justify-between select-none">
         <div className="flex items-center gap-2">
           {/* Terminal Tab */}
-          <button
-            onClick={() => setActiveDrawerTab("terminal")}
+          <PressButton
+            onPress={() => setActiveDrawerTab("terminal")}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
               activeDrawerTab === "terminal"
                 ? "bg-primary/10 text-primary font-semibold"
@@ -34,11 +35,11 @@ export function BottomDrawer() {
           >
             <Terminal className="w-3.5 h-3.5" />
             <span>Terminal</span>
-          </button>
+          </PressButton>
 
           {/* Changes Tab */}
-          <button
-            onClick={() => setActiveDrawerTab("changes")}
+          <PressButton
+            onPress={() => setActiveDrawerTab("changes")}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
               activeDrawerTab === "changes"
                 ? "bg-primary/10 text-primary font-semibold"
@@ -52,17 +53,17 @@ export function BottomDrawer() {
                 {changedCount}
               </span>
             )}
-          </button>
+          </PressButton>
         </div>
 
         {/* Close Button */}
-        <button
-          onClick={() => setDrawerOpen(false)}
+        <PressButton
+          onPress={() => setDrawerOpen(false)}
           className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
           title="Close Drawer"
         >
           <ChevronDown className="w-4 h-4" />
-        </button>
+        </PressButton>
       </div>
 
       {/* Drawer Content */}

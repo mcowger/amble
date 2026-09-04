@@ -16,6 +16,7 @@ import {
   Check,
 } from "lucide-react";
 import type { ToolCallTimelineItem } from "../../lib/paseo/types";
+import { PressButton } from "../ui/button";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import {
   getToolDisplayInfo,
@@ -143,21 +144,21 @@ export function SubagentCallItem({ item }: { item: ToolCallTimelineItem }) {
       <div className="relative ml-2.5 pl-4 py-1 border-l border-border/80 space-y-1">
         {/* +N more... toggle button if more items than default view */}
         {hiddenCount > 0 ? (
-          <button
+          <PressButton
             type="button"
-            onClick={() => setIsActionsExpanded(true)}
+            onPress={() => setIsActionsExpanded(true)}
             className="text-[11px] text-muted-foreground/70 hover:text-foreground font-mono py-0.5 select-none text-left cursor-pointer transition-colors block"
           >
             +{hiddenCount} more...
-          </button>
+          </PressButton>
         ) : isActionsExpanded && actions.length > DEFAULT_VISIBLE_ACTIONS ? (
-          <button
+          <PressButton
             type="button"
-            onClick={() => setIsActionsExpanded(false)}
+            onPress={() => setIsActionsExpanded(false)}
             className="text-[11px] text-muted-foreground/70 hover:text-foreground font-mono py-0.5 select-none text-left cursor-pointer transition-colors block"
           >
             Show fewer
-          </button>
+          </PressButton>
         ) : null}
 
         {/* Action entries list */}
@@ -218,9 +219,9 @@ export function SubagentCallItem({ item }: { item: ToolCallTimelineItem }) {
         {/* Collapsible Output Section */}
         {cleanOutput ? (
           <div className="pt-1.5">
-            <button
+            <PressButton
               type="button"
-              onClick={() => setIsOutputExpanded(!isOutputExpanded)}
+              onPress={() => setIsOutputExpanded(!isOutputExpanded)}
               className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer select-none"
             >
               {isOutputExpanded ? (
@@ -229,14 +230,14 @@ export function SubagentCallItem({ item }: { item: ToolCallTimelineItem }) {
                 <ChevronRight className="w-3 h-3 shrink-0" />
               )}
               <span>Output</span>
-            </button>
+            </PressButton>
 
             {isOutputExpanded ? (
               <div className="mt-1.5 relative rounded-lg bg-card/60 border border-border p-3 text-foreground text-[11px] overflow-x-auto max-h-72 overflow-y-auto select-text">
                 <div className="absolute top-2 right-2 z-10">
-                  <button
+                  <PressButton
                     type="button"
-                    onClick={handleCopyOutput}
+                    onPress={handleCopyOutput}
                     className="p-1 rounded bg-background/80 hover:bg-accent border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                     title="Copy output"
                   >
@@ -245,7 +246,7 @@ export function SubagentCallItem({ item }: { item: ToolCallTimelineItem }) {
                     ) : (
                       <Copy className="w-3 h-3" />
                     )}
-                  </button>
+                  </PressButton>
                 </div>
                 <MarkdownRenderer content={cleanOutput} />
               </div>

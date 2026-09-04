@@ -35,6 +35,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "../ui/tooltip";
+import { PressButton, PressTarget } from "../ui/button";
 
 export function WorkspaceScriptsTopRail() {
   const {
@@ -217,14 +218,14 @@ export function WorkspaceScriptsTopRail() {
               </span>
             )}
           </div>
-          <button
+          <PressButton
             type="button"
-            onClick={() => refreshScripts()}
+            onPress={() => refreshScripts()}
             className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
             title="Refresh scripts"
           >
             <RotateCw className="w-3 h-3" />
-          </button>
+          </PressButton>
         </div>
 
         {/* Empty State */}
@@ -308,10 +309,10 @@ export function WorkspaceScriptsTopRail() {
                         /* Run / Start Button */
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
+                            <PressButton
                               type="button"
                               disabled={inFlight !== undefined && inFlight !== null}
-                              onClick={(e) => handleStart(script, e)}
+                              onPress={() => handleStart(script)}
                               className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
                               aria-label={`Run ${script.scriptName}`}
                             >
@@ -320,7 +321,7 @@ export function WorkspaceScriptsTopRail() {
                               ) : (
                                 <Play className="w-3.5 h-3.5 fill-current/10" />
                               )}
-                            </button>
+                            </PressButton>
                           </TooltipTrigger>
                           <TooltipContent side="top">Run task</TooltipContent>
                         </Tooltip>
@@ -331,14 +332,14 @@ export function WorkspaceScriptsTopRail() {
                           {activeRoute && (
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <button
+                                <PressButton
                                   type="button"
-                                  onClick={(e) => handleOpenUrl(activeRoute.url, e)}
+                                  onPress={() => handleOpenUrl(activeRoute.url)}
                                   className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
                                   aria-label="Open service in new tab"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
-                                </button>
+                                </PressButton>
                               </TooltipTrigger>
                               <TooltipContent side="top">Open in browser</TooltipContent>
                             </Tooltip>
@@ -347,14 +348,14 @@ export function WorkspaceScriptsTopRail() {
                           {/* View Terminal */}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button
+                              <PressButton
                                 type="button"
-                                onClick={(e) => handleViewTerminal(script, e)}
+                                onPress={() => handleViewTerminal(script)}
                                 className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
                                 aria-label="View terminal"
                               >
                                 <Terminal className="w-3.5 h-3.5" />
-                              </button>
+                              </PressButton>
                             </TooltipTrigger>
                             <TooltipContent side="top">View terminal</TooltipContent>
                           </Tooltip>
@@ -362,10 +363,10 @@ export function WorkspaceScriptsTopRail() {
                           {/* Restart */}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button
+                              <PressButton
                                 type="button"
                                 disabled={inFlight !== undefined && inFlight !== null}
-                                onClick={(e) => handleRestart(script, e)}
+                                onPress={() => handleRestart(script)}
                                 className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
                                 aria-label="Restart"
                               >
@@ -374,7 +375,7 @@ export function WorkspaceScriptsTopRail() {
                                 ) : (
                                   <RotateCw className="w-3.5 h-3.5" />
                                 )}
-                              </button>
+                              </PressButton>
                             </TooltipTrigger>
                             <TooltipContent side="top">Restart</TooltipContent>
                           </Tooltip>
@@ -382,10 +383,10 @@ export function WorkspaceScriptsTopRail() {
                           {/* Stop */}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button
+                              <PressButton
                                 type="button"
                                 disabled={inFlight !== undefined && inFlight !== null}
-                                onClick={(e) => handleStop(script, e)}
+                                onPress={() => handleStop(script)}
                                 className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
                                 aria-label="Stop"
                               >
@@ -394,7 +395,7 @@ export function WorkspaceScriptsTopRail() {
                                 ) : (
                                   <Square className="w-3.5 h-3.5 fill-current/15" />
                                 )}
-                              </button>
+                              </PressButton>
                             </TooltipTrigger>
                             <TooltipContent side="top">Stop</TooltipContent>
                           </Tooltip>
@@ -408,9 +409,9 @@ export function WorkspaceScriptsTopRail() {
                     <div className="flex flex-col gap-1 mt-0.5">
                       {/* Active Route Bar */}
                       <div className="flex items-center justify-between gap-1.5 px-2 py-1 rounded-md bg-card border border-border/60 text-[11px] font-mono">
-                        <button
+                        <PressButton
                           type="button"
-                          onClick={(e) => toggleRoutesExpanded(script.scriptName, e)}
+                          onPress={() => toggleRoutesExpanded(script.scriptName)}
                           className="flex items-center gap-1.5 min-w-0 flex-1 text-left text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                           title="Choose URL route"
                         >
@@ -423,15 +424,15 @@ export function WorkspaceScriptsTopRail() {
                           <span className="truncate text-foreground select-text font-mono">
                             {activeRoute.displayUrl}
                           </span>
-                        </button>
+                        </PressButton>
 
                         <div className="flex items-center gap-0.5 shrink-0">
                           {/* Copy active URL button */}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <button
+                              <PressButton
                                 type="button"
-                                onClick={(e) => handleCopy(activeRoute.url, e)}
+                                onPress={() => handleCopy(activeRoute.url)}
                                 className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
                                 aria-label="Copy URL"
                               >
@@ -440,7 +441,7 @@ export function WorkspaceScriptsTopRail() {
                                 ) : (
                                   <Copy className="w-3 h-3" />
                                 )}
-                              </button>
+                              </PressButton>
                             </TooltipTrigger>
                             <TooltipContent side="top">
                               {copiedUrl === activeRoute.url ? "Copied!" : "Copy URL"}
@@ -455,11 +456,11 @@ export function WorkspaceScriptsTopRail() {
                           {routes.map((route) => {
                             const isSelected = route.kind === activeRoute.kind;
                             return (
-                              <div
+                              <PressTarget
                                 key={route.kind}
-                                onClick={(e) => {
-                                  selectRouteKind(script.scriptName, route.kind, e);
-                                  handleCopy(route.url, e);
+                                onPress={() => {
+                                  selectRouteKind(script.scriptName, route.kind);
+                                  handleCopy(route.url);
                                 }}
                                 className={cn(
                                   "px-2 py-1.5 rounded-md cursor-pointer flex items-start justify-between gap-2 transition-colors",
@@ -486,19 +487,19 @@ export function WorkspaceScriptsTopRail() {
 
                                 <div className="flex items-center gap-0.5 shrink-0 pt-0.5">
                                   {/* Open directly */}
-                                  <button
+                                  <PressButton
                                     type="button"
-                                    onClick={(e) => handleOpenUrl(route.url, e)}
+                                    onPress={() => handleOpenUrl(route.url)}
                                     className="p-1 rounded-sm hover:bg-background/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                                     title={`Open ${route.name}`}
                                   >
                                     <ExternalLink className="w-3 h-3" />
-                                  </button>
+                                  </PressButton>
 
                                   {/* Copy directly */}
-                                  <button
+                                  <PressButton
                                     type="button"
-                                    onClick={(e) => handleCopy(route.url, e)}
+                                    onPress={() => handleCopy(route.url)}
                                     className="p-1 rounded-sm hover:bg-background/80 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                                     title={`Copy ${route.name} URL`}
                                   >
@@ -507,9 +508,9 @@ export function WorkspaceScriptsTopRail() {
                                     ) : (
                                       <Copy className="w-3 h-3" />
                                     )}
-                                  </button>
+                                  </PressButton>
                                 </div>
-                              </div>
+                              </PressTarget>
                             );
                           })}
                         </div>
