@@ -9,6 +9,7 @@
     "dev:stop": "paseo script stop dev",
     "stop": "paseo script stop dev",
     "build": "bun run build.ts",
+    "compile": "bun run compile.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
