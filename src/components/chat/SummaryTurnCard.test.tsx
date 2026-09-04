@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { extractLatestTasks, SummaryTurnCard } from "./SummaryTurnCard";
+import { extractCurrentAndNextTasks, extractLatestTasks, SummaryTurnCard } from "./SummaryTurnCard";
 import type { TodoTimelineItem, ToolCallTimelineItem } from "../../lib/paseo/types";
 
 describe("extractLatestTasks", () => {
@@ -64,6 +64,29 @@ describe("extractLatestTasks", () => {
 });
 
 describe("SummaryTurnCard with tasks", () => {
+  test("extracts the current task and the next incomplete task for mobile", () => {
+    const tasks = [
+      { text: "Finished task", completed: true, status: "completed" as const },
+      { text: "Current task", completed: false, status: "in_progress" as const },
+      { text: "Next task", completed: false, status: "pending" as const },
+      { text: "Later task", completed: false, status: "pending" as const },
+    ];
+
+    expect(extractCurrentAndNextTasks(tasks).map((task) => task.text)).toEqual([
+      "Current task",
+      "Next task",
+    ]);
+  });
+
+  test("returns no mobile tasks when every task is complete", () => {
+    const tasks = [
+      { text: "Finished task 1", completed: true, status: "completed" as const },
+      { text: "Finished task 2", completed: false, status: "completed" as const },
+    ];
+
+    expect(extractCurrentAndNextTasks(tasks)).toEqual([]);
+  });
+
   test("renders tasks section above tool calls in the tools card", () => {
     const toolCalls: ToolCallTimelineItem[] = [
       {

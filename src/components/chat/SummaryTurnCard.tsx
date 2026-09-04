@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo, useState } from "react";
 import {
   Terminal,
   FileCode,
@@ -19,11 +19,12 @@ import type {
   TodoTimelineItem,
   TodoItem,
 } from "../../lib/paseo/types";
-import { formatDuration, formatRelativePath } from "../../lib/utils";
+import { formatDuration, formatRelativePath, stripCwdFromText } from "../../lib/utils";
 import { extractFilePathFromDiff, resolveDiffStats } from "./diff-utils";
 import { AssistantMessage } from "./AssistantMessage";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { TodoItemsList } from "./TodoBlock";
+import { PressButton } from "../ui/button";
 
 interface SummaryTurnCardProps {
   toolCalls: ToolCallTimelineItem[];
@@ -51,6 +52,43 @@ function getToolIcon(toolName: string) {
   return <Code2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />;
 }
 
+function getRecentToolData(call: ToolCallTimelineItem, cwd?: string): string | undefined {
+  const toolName = call.name || call.tool || "tool";
+
+  if (call.title && call.title !== toolName) {
+    return formatRelativePath(call.title, cwd);
+  }
+
+  if (call.filePath) {
+    return formatRelativePath(call.filePath, cwd);
+  }
+
+  if (typeof call.input === "string") {
+    return stripCwdFromText(call.input.split(/\r?\n/)[0]?.trim(), cwd);
+  }
+
+  if (call.input && typeof call.input === "object") {
+    const input = call.input as Record<string, unknown>;
+    const command = input.command;
+    if (typeof command === "string") return stripCwdFromText(command, cwd);
+
+    for (const key of ["filePath", "file_path", "path", "query", "pattern", "description", "name"]) {
+      const value = input[key];
+      if (typeof value === "string" && value.trim()) {
+        return key === "filePath" || key === "file_path" || key === "path"
+          ? formatRelativePath(value, cwd)
+          : value;
+      }
+    }
+  }
+
+  if (typeof call.output === "string") {
+    return `output: ${call.output.split(/\r?\n/)[0]?.trim()}`;
+  }
+
+  return undefined;
+}
+
 export function extractLatestTasks(todos?: TodoTimelineItem[]): TodoItem[] {
   if (!todos || todos.length === 0) return [];
   for (let i = todos.length - 1; i >= 0; i--) {
@@ -62,6 +100,18 @@ export function extractLatestTasks(todos?: TodoTimelineItem[]): TodoItem[] {
   return [];
 }
 
+export function extractCurrentAndNextTasks(tasks: TodoItem[]): TodoItem[] {
+  const isDone = (task: TodoItem) => task.completed || task.status === "completed";
+  const activeTasks = tasks.filter((task) => !isDone(task));
+  const currentIndex = activeTasks.findIndex((task) => task.status === "in_progress");
+
+  if (currentIndex >= 0) {
+    return activeTasks.slice(currentIndex, currentIndex + 2);
+  }
+
+  return activeTasks.slice(0, 2);
+}
+
 export function SummaryTurnCard({
   toolCalls,
   reasonings,
@@ -71,9 +121,12 @@ export function SummaryTurnCard({
   activeAgentCwd,
 }: SummaryTurnCardProps) {
   const thoughtScrollRef = useRef<HTMLDivElement>(null);
+  const [showAllTasksMobile, setShowAllTasksMobile] = useState(false);
 
   // Extract latest tasks list from todos
   const tasks = useMemo<TodoItem[]>(() => extractLatestTasks(todos), [todos]);
+  const mobileTasks = useMemo(() => extractCurrentAndNextTasks(tasks), [tasks]);
+  const recentToolCalls = useMemo(() => toolCalls.slice(-3).reverse(), [toolCalls]);
 
   const completedTasksCount = useMemo(() => {
     return tasks.filter((t) => t.completed || t.status === "completed").length;
@@ -178,12 +231,12 @@ export function SummaryTurnCard({
   }, [combinedThoughtText, isStreamingReasoning]);
 
   return (
-    <div className="my-3 space-y-3">
+    <div className="my-2 sm:my-3 space-y-2 sm:space-y-3">
       {/* 2-Column Summary Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3 items-stretch">
         {/* Left Column: Tools Summary */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0 min-h-[160px]">
-          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
+        <div className="order-2 md:order-1 rounded-lg border border-border/60 bg-muted/20 p-2.5 md:p-3 flex flex-col min-w-0 min-h-0 md:min-h-[160px]">
+          <div className="flex items-center justify-between pb-1.5 md:pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
             <div className="flex items-center gap-1.5">
               <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
               <span>Tools</span>
@@ -195,7 +248,7 @@ export function SummaryTurnCard({
 
           {/* Tasks & Plan (if present) */}
           {tasks.length > 0 && (
-            <div className="py-2.5 border-b border-border/30 space-y-2 shrink-0">
+            <div className="py-2 border-b border-border/30 space-y-2 shrink-0">
               <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-muted-foreground tracking-wider select-none">
                 <div className="flex items-center gap-1.5">
                   <ListTodo className="w-3.5 h-3.5 text-primary" />
@@ -205,24 +258,88 @@ export function SummaryTurnCard({
                   {completedTasksCount}/{tasks.length}
                 </span>
               </div>
-              <TodoItemsList
-                items={tasks}
-                className="space-y-1.5 max-h-56 overflow-y-auto pr-1"
-              />
+              <div className="hidden md:block">
+                <TodoItemsList
+                  items={tasks}
+                  className="space-y-1.5 max-h-56 overflow-y-auto pr-1"
+                />
+              </div>
+              <div className="md:hidden">
+                {showAllTasksMobile ? (
+                  <TodoItemsList
+                    items={tasks}
+                    collapseCompleted={false}
+                    className="space-y-1.5"
+                  />
+                ) : mobileTasks.length > 0 ? (
+                  <TodoItemsList items={mobileTasks} className="space-y-1.5" />
+                ) : (
+                  <div className="text-xs italic text-muted-foreground">All tasks complete</div>
+                )}
+                {tasks.length > mobileTasks.length && (
+                  <PressButton
+                    type="button"
+                    onPress={() => setShowAllTasksMobile((expanded) => !expanded)}
+                    className="mt-1.5 min-h-8 text-[11px] font-medium text-primary touch-manipulation"
+                    aria-expanded={showAllTasksMobile}
+                  >
+                    {showAllTasksMobile ? "Show fewer tasks" : `Show all ${tasks.length} tasks`}
+                  </PressButton>
+                )}
+              </div>
+            </div>
+          )}
+
+          {recentToolCalls.length > 0 && (
+            <div className="md:hidden border-b border-border/30 py-2 space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] uppercase font-semibold text-muted-foreground tracking-wider select-none">
+                <span>Recent Activity</span>
+                <span className="font-mono font-normal">{recentToolCalls.length} latest</span>
+              </div>
+              <div className="-mx-1">
+                {recentToolCalls.map((call) => (
+                  <div key={call.callId} className="flex items-start gap-2 rounded-md px-1 py-1.5 min-w-0">
+                    {getToolIcon(call.name || call.tool || "tool")}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                        <span className="truncate font-semibold text-foreground">
+                          {call.name || call.tool || "tool"}
+                        </span>
+                        <span
+                          className={`shrink-0 ${
+                            call.status === "running"
+                              ? "text-amber-500"
+                              : call.status === "failed"
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {call.status}
+                        </span>
+                      </div>
+                      {getRecentToolData(call, activeAgentCwd) && (
+                        <div className="truncate text-[11px] text-muted-foreground font-mono">
+                          {getRecentToolData(call, activeAgentCwd)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Tool counts */}
-          <div className="py-2 space-y-1.5 flex-1">
+          <div className="py-2 grid grid-cols-2 gap-x-3 gap-y-1.5 md:block md:space-y-1.5 flex-1">
             {toolStats.length === 0 ? (
-              <div className="text-xs text-muted-foreground italic py-1">
+              <div className="col-span-2 text-xs text-muted-foreground italic py-1">
                 No tool calls executed
               </div>
             ) : (
               toolStats.map((stat) => (
                 <div
                   key={stat.tool}
-                  className="flex items-center justify-between text-xs font-mono"
+                  className="flex items-center justify-between text-[11px] md:text-xs font-mono min-w-0"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     {getToolIcon(stat.tool)}
@@ -247,11 +364,11 @@ export function SummaryTurnCard({
 
           {/* Touched / Modified files */}
           {modifiedFiles.length > 0 && (
-            <div className="pt-2 border-t border-border/30 mt-auto select-none shrink-0">
+            <div className="pt-1.5 md:pt-2 border-t border-border/30 mt-auto select-none shrink-0">
               <div className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">
                 Touched Files ({modifiedFiles.length})
               </div>
-              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-20 md:max-h-28 overflow-y-auto pr-1">
                 {modifiedFiles.map((file) => (
                   <div
                     key={file.path}
@@ -283,8 +400,8 @@ export function SummaryTurnCard({
         </div>
 
         {/* Right Column: Thought Log Mini Console */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 flex flex-col min-w-0 md:h-0 md:min-h-full">
-          <div className="flex items-center justify-between pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
+        <div className="order-1 md:order-2 rounded-lg border border-border/60 bg-muted/20 p-2.5 md:p-3 flex flex-col min-w-0 min-h-[156px] max-h-[190px] md:h-0 md:min-h-full md:max-h-none">
+          <div className="flex items-center justify-between pb-1.5 md:pb-2 border-b border-border/40 text-xs font-semibold text-foreground select-none shrink-0">
             <div className="flex items-center gap-1.5">
               <Brain className="w-3.5 h-3.5 text-blue-500" />
               <span>Thought Log</span>
@@ -304,7 +421,7 @@ export function SummaryTurnCard({
           {/* Monospace Scrolling Console */}
           <div
             ref={thoughtScrollRef}
-            className="mt-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden text-xs leading-relaxed bg-background/60 rounded-md p-2.5 border border-border/30 text-muted-foreground select-text"
+            className="mt-1.5 md:mt-2 h-[108px] md:h-auto md:flex-1 min-h-0 overflow-y-auto overflow-x-hidden text-xs leading-relaxed bg-background/60 rounded-md p-2 md:p-2.5 border border-border/30 text-muted-foreground select-text"
           >
             {combinedThoughtText ? (
               <MarkdownRenderer content={combinedThoughtText} variant="thought" />
