@@ -27,7 +27,17 @@ import {
   Search,
   Sparkles,
   Pencil,
+  Clock,
+  GripVertical,
 } from "lucide-react";
+import {
+  getProjectKey,
+  parseStoredProjectOrder,
+  sortProjectsByOrder,
+  reorderProjectKeys,
+  getRecentSessions,
+  getSessionContextLabel,
+} from "./sidebar-order-utils";
 import { slugify } from "@getpaseo/protocol/branch-slug";
 import {
   Dialog,
@@ -594,6 +604,23 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
   const [targetWorktreeProject, setTargetWorktreeProject] = useState<ProjectItem | null>(null);
   const [isRegisterProjectOpen, setIsRegisterProjectOpen] = useState(false);
 
+  const [projectOrder, setProjectOrder] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      return parseStoredProjectOrder(localStorage.getItem("amble-project-order"));
+    }
+    return [];
+  });
+
+  const [draggedProjectKey, setDraggedProjectKey] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    key: string;
+    position: "above" | "below";
+  } | null>(null);
+
+  const recentSessions = useMemo(() => {
+    return getRecentSessions(allAgents, 3);
+  }, [allAgents]);
+
   const toggleProjectCollapse = (projectId: string, isCurrentlyCollapsed: boolean) => {
     setProjectCollapseOverrides((prev) => {
       const next = toggleCollapseRecord(prev, projectId, isCurrentlyCollapsed);
@@ -639,7 +666,7 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
       }
     }
 
-    return Array.from(pMap.values()).map((p) => {
+    const items = Array.from(pMap.values()).map((p) => {
       // Find registered workspaces belonging to this project
       const projectWorkspaces = workspaces.filter(
         (w) =>
@@ -673,7 +700,70 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
         worktrees,
       };
     });
-  }, [projects, workspaces, allAgents]);
+
+    return sortProjectsByOrder(items, projectOrder);
+  }, [projects, workspaces, allAgents, projectOrder]);
+
+  const handleDragStart = (e: React.DragEvent, projectKey: string) => {
+    setDraggedProjectKey(projectKey);
+    e.dataTransfer.setData("text/plain", projectKey);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetKey: string) => {
+    if (!draggedProjectKey || draggedProjectKey === targetKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? "above" : "below";
+
+    setDropTarget((prev) => {
+      if (prev?.key === targetKey && prev?.position === position) return prev;
+      return { key: targetKey, position };
+    });
+  };
+
+  const handleDragLeave = (e: React.DragEvent, targetKey: string) => {
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && e.currentTarget.contains(relatedTarget)) {
+      return;
+    }
+    setDropTarget((prev) => (prev?.key === targetKey ? null : prev));
+  };
+
+  const handleDrop = (e: React.DragEvent, targetKey: string) => {
+    e.preventDefault();
+    if (!draggedProjectKey || draggedProjectKey === targetKey || !dropTarget) {
+      setDraggedProjectKey(null);
+      setDropTarget(null);
+      return;
+    }
+
+    const currentKeys = projectTree.map((item) => getProjectKey(item.project));
+    const nextOrder = reorderProjectKeys(
+      currentKeys,
+      draggedProjectKey,
+      targetKey,
+      dropTarget.position,
+    );
+
+    setProjectOrder(nextOrder);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("amble-project-order", JSON.stringify(nextOrder));
+      } catch {}
+    }
+
+    setDraggedProjectKey(null);
+    setDropTarget(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedProjectKey(null);
+    setDropTarget(null);
+  };
 
   // Automatically uncollapse project/worktree containing the active session
   useEffect(() => {
@@ -798,8 +888,84 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
 
       {/* Tree list with Shadcn ScrollArea */}
       <ScrollArea className="flex-1 h-full min-h-0" viewportClassName="py-3 px-2">
+        {/* Recent Sessions */}
+        {recentSessions.length > 0 && (
+          <div className="mb-3 space-y-1">
+            <div className="flex items-center justify-between px-1.5 py-0.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-muted-foreground/80" />
+                Recent
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {recentSessions.map((session) => {
+                const isActive = session.id === activeAgentId;
+                const elapsed = formatElapsed(session.updatedAt || session.createdAt);
+                const contextLabel = getSessionContextLabel(session, workspaces, projects);
+
+                return (
+                  <div key={session.id} className="px-0.5">
+                    <PressTarget
+                      onPress={() => handleSelectSession(session.id, session.workspaceId)}
+                      className={cn(
+                        "group flex flex-col gap-0.5 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-all",
+                        isActive
+                          ? "bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-200 shadow-2xs font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/30",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 truncate">
+                          {session.status === "running" ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-amber-500 shrink-0" />
+                          ) : isActive ? (
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                          ) : (
+                            <Sparkles className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+                          )}
+                          <span className="truncate font-medium text-foreground">
+                            {session.title || "Untitled Session"}
+                          </span>
+                        </div>
+                        {elapsed && (
+                          <span
+                            className={cn(
+                              "text-[10px] font-mono shrink-0 ml-1",
+                              isActive
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-muted-foreground/70",
+                            )}
+                          >
+                            {elapsed}
+                          </span>
+                        )}
+                      </div>
+                      {contextLabel && (
+                        <div className="pl-3 text-[10px] font-mono text-muted-foreground/60 truncate">
+                          {contextLabel}
+                        </div>
+                      )}
+                    </PressTarget>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-b border-border/40 pt-1.5" />
+            <div className="flex items-center justify-between px-1.5 pt-1">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Projects
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-2.5">
           {projectTree.map(({ project, directWorkspace, directSessions, worktrees }) => {
+            const projectKey = getProjectKey(project);
+            const isBeingDragged = draggedProjectKey === projectKey;
+            const isDropTargetAbove = dropTarget?.key === projectKey && dropTarget.position === "above";
+            const isDropTargetBelow = dropTarget?.key === projectKey && dropTarget.position === "below";
+
             const hasChildren =
               directSessions.length > 0 || worktrees.length > 0;
             const isEmpty = isProjectEmpty(directSessions, worktrees);
@@ -810,12 +976,42 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
             );
 
             return (
-              <div key={project.id || project.name} className="space-y-0.5">
+              <div
+                key={projectKey}
+                className={cn(
+                  "space-y-0.5 relative transition-opacity",
+                  isBeingDragged && "opacity-40",
+                )}
+                onDragOver={(e) => handleDragOver(e, projectKey)}
+                onDragLeave={(e) => handleDragLeave(e, projectKey)}
+                onDrop={(e) => handleDrop(e, projectKey)}
+              >
+                {/* Drop indicator above */}
+                {isDropTargetAbove && (
+                  <div className="absolute -top-1 left-1 right-1 h-0.5 bg-primary rounded-full z-20 pointer-events-none" />
+                )}
+
                 {/* Project Header */}
-                <div className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground transition-colors">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, projectKey)}
+                  onDragEnd={handleDragEnd}
+                  className="group flex items-center justify-between py-1 px-1.5 rounded-md hover:bg-accent/40 text-foreground transition-colors"
+                >
+                  <div className="flex items-center gap-1 min-w-0 flex-1">
+                    <div
+                      className="p-0.5 text-muted-foreground/30 group-hover:text-muted-foreground/80 hover:!text-foreground cursor-grab active:cursor-grabbing shrink-0 transition-colors"
+                      title="Drag to reorder project"
+                      aria-label={`Drag to reorder ${project.name}`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <GripVertical className="w-3.5 h-3.5 pointer-events-none" />
+                    </div>
+
                     <PressButton
                       type="button"
+                      draggable={false}
+                      onDragStart={(e) => e.stopPropagation()}
                       onPress={() => {
                         toggleProjectCollapse(project.id, isProjectCollapsed);
                       }}
@@ -851,6 +1047,8 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                   >
                     <PressButton
                       type="button"
+                      draggable={false}
+                      onDragStart={(e) => e.stopPropagation()}
                       onPress={() => {
                         setTargetWorktreeProject(project);
                       }}
@@ -862,6 +1060,8 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                     </PressButton>
                     <PressButton
                       type="button"
+                      draggable={false}
+                      onDragStart={(e) => e.stopPropagation()}
                       onPress={() => {
                         handleNewSession(directWorkspace?.id || project.id);
                       }}
@@ -1186,6 +1386,11 @@ export function Sidebar({ onCloseMobile, isMobile }: SidebarProps) {
                       </PressButton>
                     </div>
                   </div>
+                )}
+
+                {/* Drop indicator below */}
+                {isDropTargetBelow && (
+                  <div className="absolute -bottom-1 left-1 right-1 h-0.5 bg-primary rounded-full z-20 pointer-events-none" />
                 )}
               </div>
             );
