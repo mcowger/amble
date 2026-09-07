@@ -1,5 +1,5 @@
 import tailwind from "bun-plugin-tailwind";
-import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { paseoRelayExportWorkaround } from "./src/lib/paseo/relay-export-workaround";
@@ -57,7 +57,12 @@ if (!frontendResult.success) {
   process.exit(1);
 }
 
-const bundledHtml = await frontendResult.outputs[0]?.text();
+const bundledHtml = (await frontendResult.outputs[0]?.text())
+  ?.replace(/\.\/favicon-[^/\"]+\.ico/g, "/favicon.ico")
+  ?.replace(/\.\/favicon-16-[^/\"]+\.png/g, "/favicon-16.png")
+  ?.replace(/\.\/favicon-32-[^/\"]+\.png/g, "/favicon-32.png")
+  ?.replace(/\.\/apple-touch-icon-[^/\"]+\.png/g, "/apple-touch-icon.png")
+  ?.replace(/\.\/manifest-[^/\"]+\.json/g, "/manifest.json");
 if (!bundledHtml) {
   console.error("❌ Frontend build produced empty output");
   process.exit(1);
@@ -74,6 +79,13 @@ const proxyHandlerPath = path.resolve(process.cwd(), "src/lib/paseo/proxy-handle
 const serverCode = `import { serve } from "bun";
 import html from "./index.html" with { type: "text" };
 import manifest from "./manifest.json" with { type: "text" };
+import favicon from "./favicon.ico" with { type: "file" };
+import favicon16 from "./favicon-16.png" with { type: "file" };
+import favicon32 from "./favicon-32.png" with { type: "file" };
+import favicon48 from "./favicon-48.png" with { type: "file" };
+import appleTouchIcon from "./apple-touch-icon.png" with { type: "file" };
+import icon192 from "./icon-192.png" with { type: "file" };
+import icon512 from "./icon-512.png" with { type: "file" };
 import logo from "./logo.svg" with { type: "text" };
 import {
   handleWsUpgrade,
@@ -81,6 +93,14 @@ import {
   getUpstreamWsUrl,
   type ProxySocketData,
 } from ${JSON.stringify(proxyHandlerPath)};
+
+const imageResponse = (asset: string, contentType: string) =>
+  new Response(Bun.file(asset), {
+    headers: {
+      "content-type": contentType,
+      "cache-control": "public, max-age=86400",
+    },
+  });
 
 const args = process.argv.slice(2);
 let port = Number(process.env.PORT || 5555);
@@ -139,6 +159,48 @@ const server = serve<ProxySocketData>({
             "cache-control": "public, max-age=86400",
           },
         });
+      },
+    },
+
+    "/favicon.ico": {
+      GET() {
+        return imageResponse(favicon, "image/x-icon");
+      },
+    },
+
+    "/favicon-16.png": {
+      GET() {
+        return imageResponse(favicon16, "image/png");
+      },
+    },
+
+    "/favicon-32.png": {
+      GET() {
+        return imageResponse(favicon32, "image/png");
+      },
+    },
+
+    "/favicon-48.png": {
+      GET() {
+        return imageResponse(favicon48, "image/png");
+      },
+    },
+
+    "/apple-touch-icon.png": {
+      GET() {
+        return imageResponse(appleTouchIcon, "image/png");
+      },
+    },
+
+    "/icon-192.png": {
+      GET() {
+        return imageResponse(icon192, "image/png");
+      },
+    },
+
+    "/icon-512.png": {
+      GET() {
+        return imageResponse(icon512, "image/png");
       },
     },
 
@@ -203,6 +265,20 @@ try {
     await Bun.file(path.resolve(process.cwd(), "src/logo.svg")).text(),
     "utf8",
   );
+  for (const asset of [
+    "favicon.ico",
+    "favicon-16.png",
+    "favicon-32.png",
+    "favicon-48.png",
+    "apple-touch-icon.png",
+    "icon-192.png",
+    "icon-512.png",
+  ]) {
+    await copyFile(
+      path.resolve(process.cwd(), "src", asset),
+      path.join(tempDir, asset),
+    );
+  }
   await writeFile(path.join(tempDir, "entry.ts"), serverCode, "utf8");
 
   // Step 3: Compile into standalone executable

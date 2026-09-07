@@ -1,6 +1,13 @@
 import { serve } from "bun";
 import index from "./index.html";
 import manifest from "./manifest.json";
+import favicon from "./favicon.ico" with { type: "file" };
+import favicon16 from "./favicon-16.png" with { type: "file" };
+import favicon32 from "./favicon-32.png" with { type: "file" };
+import favicon48 from "./favicon-48.png" with { type: "file" };
+import appleTouchIcon from "./apple-touch-icon.png" with { type: "file" };
+import icon192 from "./icon-192.png" with { type: "file" };
+import icon512 from "./icon-512.png" with { type: "file" };
 import logo from "./logo.svg" with { type: "text" };
 import {
   handleWsUpgrade,
@@ -12,6 +19,13 @@ import {
 const port = Number(process.env.PORT || 5555);
 const hostname = process.env.HOST || "0.0.0.0";
 const touchTelemetryRevision = "touch-v6-react-aria";
+const imageResponse = (asset: string, contentType: string) =>
+  new Response(Bun.file(asset), {
+    headers: {
+      "content-type": contentType,
+      "cache-control": "public, max-age=86400",
+    },
+  });
 
 // Disable Bun's internal dev server Host header / DNS-rebinding check so it
 // never blocks proxied requests (e.g. "Blocked: Host header does not match the dev server").
@@ -42,6 +56,48 @@ const server = serve<ProxySocketData>({
             "cache-control": "public, max-age=86400",
           },
         });
+      },
+    },
+
+    "/favicon.ico": {
+      GET() {
+        return imageResponse(favicon, "image/x-icon");
+      },
+    },
+
+    "/favicon-16.png": {
+      GET() {
+        return imageResponse(favicon16, "image/png");
+      },
+    },
+
+    "/favicon-32.png": {
+      GET() {
+        return imageResponse(favicon32, "image/png");
+      },
+    },
+
+    "/favicon-48.png": {
+      GET() {
+        return imageResponse(favicon48, "image/png");
+      },
+    },
+
+    "/apple-touch-icon.png": {
+      GET() {
+        return imageResponse(appleTouchIcon, "image/png");
+      },
+    },
+
+    "/icon-192.png": {
+      GET() {
+        return imageResponse(icon192, "image/png");
+      },
+    },
+
+    "/icon-512.png": {
+      GET() {
+        return imageResponse(icon512, "image/png");
       },
     },
 
